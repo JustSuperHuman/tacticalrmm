@@ -8,8 +8,9 @@
 #   ./take-control.sh --off      go back to MeshCentral's page
 #
 # The dashboard opens Take Control at https://<dashboard>/takecontrol/<agent id>; this
-# adds an nginx redirect for that address to /support/control/agents/<agent id>/ on
-# the API host. Signing in to the dashboard signs in to the viewer too.
+# adds an nginx redirect for that address to /support/control/agents/<agent id>/, on
+# the dashboard's own address once support-site.sh has run, otherwise on the API host.
+# Signing in to the dashboard signs in to the viewer too.
 
 set -euo pipefail
 
@@ -37,11 +38,18 @@ if [[ ! "$api_host" =~ ^[A-Za-z0-9.-]+$ ]]; then
   exit 1
 fi
 
+# Once support-site.sh serves the console on the dashboard's address, the window
+# opens there too.
+target="https://${api_host}"
+if [[ -f /etc/nginx/snippets/trmm-support-console.conf ]]; then
+  target=""
+fi
+
 sudo mkdir -p /etc/nginx/snippets
 sudo tee "$SNIPPET" >/dev/null <<EOF
 # The dashboard's Take Control opens the remote control window (take-control.sh).
 location ~ ^/takecontrol/([A-Za-z0-9_-]+)/?\$ {
-    return 302 https://${api_host}/support/control/agents/\$1/;
+    return 302 ${target}/support/control/agents/\$1/;
 }
 EOF
 

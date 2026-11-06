@@ -9,6 +9,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -260,7 +261,7 @@ class SupportConsoleTests(TestCase):
     def test_anonymous_console_requires_dashboard_sign_in(self):
         self.client.logout()
         response = self.client.get("/support/manage/")
-        self.assertContains(response, "Open the dashboard", status_code=401)
+        self.assertContains(response, "Sign in to Access", status_code=401)
         self.assertNotContains(response, "Create code", status_code=401)
 
     def test_existing_dashboard_session_can_create_code_and_see_it_once(self):
@@ -439,9 +440,30 @@ class SupportBrandingTests(TestCase):
     def test_defaults_until_branding_is_saved(self):
         self.assertEqual(self.client.get("/support/logo/").status_code, 404)
         response = Client().get("/support/")
-        self.assertContains(response, "support/logo.png")
-        self.assertContains(response, "Tactical RMM")
+        self.assertContains(response, "support/brand/justconnect.webp")
+        self.assertContains(response, "support/brand/justconnect-dark.webp")
+        self.assertContains(response, 'alt="JustConnect"')
+        self.assertContains(response, "support/brand/favicon.png")
+        self.assertNotContains(response, "Tactical RMM")
         self.assertContains(response, "Ask your technician to send you one.")
+
+    def test_another_company_name_gets_the_mark_beside_it(self):
+        self.save(name="Acme IT")
+        page = Client().get("/support/")
+        self.assertNotContains(page, "justconnect.webp")
+        self.assertContains(page, "support/brand/mark.webp")
+        self.assertContains(page, "<span>Acme IT</span>", html=False)
+
+    def test_console_switches_between_support_and_access(self):
+        page = self.client.get("/support/manage/").content.decode()
+        switch = page[page.index('class="sh-seg sp-switch"') :]
+        switch = switch[: switch.index("</nav>")]
+        self.assertIn(
+            '<a href="/support/manage/" aria-current="page">', switch
+        )
+        dashboard = settings.CORS_ORIGIN_WHITELIST[0].rstrip("/")
+        self.assertIn(f'<a href="{dashboard}">', switch)
+        self.assertIn("Access</a>", switch)
 
     def test_logo_name_and_contacts_appear_on_the_public_page(self):
         response = self.save(

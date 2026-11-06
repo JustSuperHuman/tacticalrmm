@@ -7,11 +7,11 @@
       <header class="sp-card-top">{% include 'support/_brand.html' %}</header>
       <div class="sp-head">
         <h1 id="title">{% if signed_in %}You need technician access{% else %}Sign in to start support sessions{% endif %}</h1>
-        <p>{% if signed_in %}Your role needs the Install agents and Use MeshCentral permissions. Ask an administrator to add them.{% else %}Sign in to the dashboard, then come back to this page.{% endif %}</p>
+        <p>{% if signed_in %}Your role needs the Install agents and Use MeshCentral permissions. Ask an administrator to add them.{% else %}Support and Access share one sign-in. Sign in to Access, then switch to Support at the top.{% endif %}</p>
       </div>
-      <a class="sh-btn sh-btn--primary sh-btn--lg sh-btn--block" href="{{ dashboard_url }}"><span>Open the dashboard</span><svg class="sp-icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a class="sh-btn sh-btn--primary sh-btn--lg sh-btn--block" href="{{ dashboard_url }}"><span>{% if signed_in %}Back to Access{% else %}Sign in to Access{% endif %}</span><svg class="sp-icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
     </section>
-    <footer class="sp-foot"><a class="sp-foot-link" href="{% url 'support:portal' %}">Go to the public support page</a></footer>
+    <footer class="sp-foot"><a class="sp-foot-link" href="{{ portal_url|default:'/support/' }}">Go to the public support page</a></footer>
   </div>
 </main>
 {% endblock %}

@@ -81,20 +81,30 @@ def _grant(request):
     return None
 
 
+WORDMARK_NAME = "JustConnect"
+
+
 def _brand():
     saved = SupportBranding.load()
-    logo_url = static("support/logo.png")
+    custom_logo_url = ""
     if saved.has_logo:
-        logo_url = f"{reverse('support:logo')}?v={int(saved.updated_at.timestamp())}"
-    default_name = getattr(settings, "SUPPORT_BRAND_NAME", "Tactical RMM")
+        custom_logo_url = (
+            f"{reverse('support:logo')}?v={int(saved.updated_at.timestamp())}"
+        )
+    default_name = getattr(settings, "SUPPORT_BRAND_NAME", WORDMARK_NAME)
+    name = saved.name or default_name
     return {
-        "name": saved.name or default_name,
+        "name": name,
         "default_name": default_name,
         "email": saved.contact_email or getattr(settings, "SUPPORT_CONTACT_EMAIL", ""),
         "phone": saved.contact_phone,
         "phone_href": re.sub(r"[^\d+]", "", saved.contact_phone),
-        "logo_url": logo_url,
+        "logo_url": custom_logo_url or static("support/brand/mark.webp"),
+        "icon_url": custom_logo_url or static("support/brand/favicon.png"),
         "custom_logo": saved.has_logo,
+        # The JustConnect wordmark stands in for the name only while the name is
+        # JustConnect; another company name gets the mark beside it instead.
+        "wordmark": not saved.has_logo and name == WORDMARK_NAME,
         "saved": saved,
     }
 

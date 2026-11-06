@@ -433,6 +433,7 @@ def sessions(request):
                 {
                     "brand": _brand(),
                     "dashboard_url": dashboard_url(),
+                    "portal_url": public_url(request),
                     "signed_in": signed_in,
                 },
                 status=403 if signed_in else 401,

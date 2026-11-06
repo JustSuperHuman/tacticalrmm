@@ -8,7 +8,8 @@
   <meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0b0d10" media="(prefers-color-scheme: dark)">
   <title>{% block title %}Remote support{% endblock %} | {{ brand.name }}</title>
-  <link rel="icon" href="{{ brand.logo_url }}">
+  <link rel="icon" href="{{ brand.icon_url }}">
+  {% if not brand.custom_logo %}<link rel="apple-touch-icon" href="{% static 'support/brand/apple-touch-icon.png' %}">{% endif %}
   <link rel="preload" href="{% static 'support/superhuman/fonts/Geist-Variable.woff2' %}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{% static 'support/superhuman/superhuman.css' %}">
   <link rel="stylesheet" href="{% static 'support/support.css' %}">
@@ -63,6 +64,8 @@
     <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
     <symbol id="i-type" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></symbol>
     <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+    <symbol id="i-headset" viewBox="0 0 24 24"><path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm0 0a9 9 0 1 1 18 0m0 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z"/><path d="M21 16v2a4 4 0 0 1-4 4h-5"/></symbol>
+    <symbol id="i-access" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/></symbol>
     <symbol id="i-displays" viewBox="0 0 24 24"><rect x="2" y="5" width="13" height="10" rx="1.5"/><path d="M19 9h1.5A1.5 1.5 0 0 1 22 10.5v7a1.5 1.5 0 0 1-1.5 1.5H10a1.5 1.5 0 0 1-1.5-1.5V19M6 19h4"/></symbol>
   </svg>
   {% block body %}{% endblock %}

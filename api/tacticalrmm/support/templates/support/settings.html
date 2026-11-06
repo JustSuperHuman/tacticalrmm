@@ -1,4 +1,4 @@
-{% extends 'support/host_base.html' %}
+{% extends 'support/host_base.html' %}{% load static %}
 {% block title %}Settings{% endblock %}
 {% block crumb %}Settings{% endblock %}
 {% block main %}
@@ -69,7 +69,7 @@
     <form method="post" enctype="multipart/form-data" class="sh-card-pad sp-form">
       {% csrf_token %}<input type="hidden" name="action" value="branding">
       <div class="sp-logo-row">
-        <div class="sp-logo-preview"><img id="logo-preview" src="{{ brand.logo_url }}" alt="Current logo"></div>
+        <div class="sp-logo-preview">{% if brand.wordmark %}<picture><source srcset="{% static 'support/brand/justconnect-dark.webp' %}" media="(prefers-color-scheme: dark)"><img id="logo-preview" src="{% static 'support/brand/justconnect.webp' %}" alt="Current logo"></picture>{% else %}<img id="logo-preview" src="{{ brand.logo_url }}" alt="Current logo">{% endif %}</div>
         <div class="sh-field">
           <label class="sh-label" for="logo">Logo</label>
           <input class="sp-file" id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" aria-describedby="logo-hint"{% if branding_form.logo.errors %} aria-invalid="true"{% endif %}>

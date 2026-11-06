@@ -253,7 +253,11 @@
     }
     if (target.id === "logo" && target.files[0]) {
       const preview = $("#logo-preview");
-      if (preview) preview.src = URL.createObjectURL(target.files[0]);
+      if (preview) {
+        // A <source> for dark mode would keep showing the default logo.
+        preview.closest("picture")?.querySelectorAll("source").forEach((s) => s.remove());
+        preview.src = URL.createObjectURL(target.files[0]);
+      }
     }
   });
 

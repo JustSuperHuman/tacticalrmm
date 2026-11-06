@@ -6,6 +6,10 @@
       <a class="sp-topbar-brand" href="{% url 'support:manage' %}">{% include 'support/_brand.html' %}</a>
       <button class="sh-btn sh-btn--ghost sh-btn--icon sh-btn--sm sp-nav-close" type="button" data-nav-close aria-label="Close the menu" title="Close the menu"><svg class="sp-icon" aria-hidden="true"><use href="#i-x"/></svg></button>
     </div>
+    <nav class="sh-seg sp-switch" aria-label="Support or Access">
+      <a href="{% url 'support:manage' %}" aria-current="page"><svg class="sp-icon" aria-hidden="true"><use href="#i-headset"/></svg>Support</a>
+      <a href="{{ dashboard_url }}"><svg class="sp-icon" aria-hidden="true"><use href="#i-access"/></svg>Access</a>
+    </nav>
     <a class="sh-btn sh-btn--primary sp-new-btn" href="{% url 'support:manage' %}?new=1"{% if workspace %} data-open="new-session"{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-plus"/></svg>New session</a>
     <nav id="session-nav" aria-label="Session groups">
       <div class="sh-nav-group">Sessions</div>
@@ -28,7 +32,6 @@
       <div class="sh-crumbs"><span class="sp-hide-phone">Remote support</span><span class="sep sp-hide-phone" aria-hidden="true">/</span><b id="crumb">{% block crumb %}{% endblock %}</b></div>
       <div class="sh-topbar-actions">
         <a class="sh-btn sh-btn--ghost sh-btn--sm" href="{{ portal_url|default:'/support/' }}" target="_blank" rel="noopener">Support page<svg class="sp-icon" aria-hidden="true"><use href="#i-external"/></svg></a>
-        <a class="sh-btn sh-btn--ghost sh-btn--sm sp-hide-phone" href="{{ dashboard_url }}">Dashboard<svg class="sp-icon" aria-hidden="true"><use href="#i-external"/></svg></a>
       </div>
     </header>
     {% block main %}{% endblock %}

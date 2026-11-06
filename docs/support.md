@@ -2,11 +2,13 @@
 
 The public page is served by this Django application at **`https://<api-host>/support/`**. The technician console is at **`/support/manage/`**. It uses the existing Tactical RMM login session, including the dashboard's MFA/SSO flow. Sign in to the dashboard, then open the console. The separately released Vue dashboard does not need to be rebuilt.
 
+The product is called **JustConnect**, and it has two halves: **Support**, this console, and **Access**, the RMM dashboard. A Support | Access switch at the top of each one moves between them. Both share one sign-in. Once `support-site.sh` has run (see [Deploy this fork](#deploy-this-fork)), both live on the dashboard's address.
+
 Technicians need both **Install agents** and **Use MeshCentral** permissions. Site visibility follows their existing role. Administrators can manage invitations across permitted sites; other technicians see only their own invitations. Full codes appear once when created. The database stores an HMAC digest and the last three digits. Codes expire after 15 minutes to four hours, can be revoked, and have an atomic download limit. The public form is CSRF protected and limited to five attempts per minute and 100 per day per client IP using the application's cache.
 
 ## Branding
 
-Open **Settings** in the console to set the logo, company name, help phone and help email. The logo, name and contacts appear on the public page and in the console header. People without a code see the phone and email. Logos can be PNG, JPEG, WebP or SVG up to 512 KB. The server checks the file's bytes, not its name, and serves SVGs with a sandboxing Content Security Policy. Branding is stored in the database, so it needs no media storage or nginx changes. Changing it requires the role permission for editing global settings (`can_edit_core_settings`; superusers always have it) and is recorded in the audit log. Tick **Use the default logo** and save to go back to the Tactical RMM logo. In dark mode, an uploaded logo sits on a light chip because most logos are drawn for light backgrounds.
+Open **Settings** in the console to set the logo, company name, help phone and help email. The logo, name and contacts appear on the public page and in the console header. People without a code see the phone and email. Logos can be PNG, JPEG, WebP or SVG up to 512 KB. The server checks the file's bytes, not its name, and serves SVGs with a sandboxing Content Security Policy. Branding is stored in the database, so it needs no media storage or nginx changes. Changing it requires the role permission for editing global settings (`can_edit_core_settings`; superusers always have it) and is recorded in the audit log. Tick **Use the default logo** and save to go back to the JustConnect logo. With no logo uploaded, the JustConnect wordmark stands in for the name, with a dark-mode copy for dark pages. Set a company name other than JustConnect, and the JustConnect mark sits beside that name instead. In dark mode, an uploaded logo sits on a light chip because most logos are drawn for light backgrounds.
 
 The pages use the JustUI kit (`static/support/superhuman/`, Geist fonts) and follow the visitor's light or dark system setting. Page styles live in `static/support/support.css` and use only the kit's tokens. Visitors on Windows or a Mac get their own version as the main download button. The other version stays one click away, and visitors on a phone or tablet are told to switch to their computer.
 
@@ -76,9 +78,14 @@ Anyone with console access can run toolbox commands, which also needs **Send com
 
 `install.sh` and `update.sh` in this fork install from `JustSuperHuman/tacticalrmm` on the `remote-support` branch (`TRMM_REPO` and `TRMM_BRANCH` at the top of each). Upstream's own update script would reset the server to upstream's `master`, so only use this fork's `update.sh`. It compares versions, so run it as `./update.sh --force` to pick up changes that didn't bump `TRMM_VERSION`.
 
-To give the public support page its own address, point that name at the server, make sure the server's certificate covers it, then run `./support-site.sh support.example.com` from `/rmm`. It adds an nginx site that serves only the support pages and their files, adds the name to `ALLOWED_HOSTS`, and sets `SUPPORT_PUBLIC_URL`, so invitations and the console's **Support page** link use that address. Run it again with another name to move the page, for example to the bare domain once it points at the server.
+Remote support uses two addresses: one for the people you help, and the dashboard's address for technicians. Point the public name at the server, make sure the server's certificate covers it, then run `./support-site.sh support.example.com` from `/rmm`. It sets up both:
 
-Technicians sign in to the dashboard. The session is shared across the root domain, so the console at `https://<support address>/support/manage/` and `https://<api-host>/support/manage/` both work after that.
+- **The public address** serves only the support page, the support app downloads and the logo. The script adds the name to `ALLOWED_HOSTS` and sets `SUPPORT_PUBLIC_URL`, so invitations and the console's **Support page** link use it. Links to the console or the remote control window on this address are redirected to the dashboard's address.
+- **The dashboard's address** serves Access (the dashboard) at `/` and Support (the console) at `/support/manage/`, through an nginx snippet (`/etc/nginx/snippets/trmm-support-console.conf`) included in `frontend.conf`. The snippet also has nginx add `static/support/access.js` to the dashboard's page. That script puts the JustConnect logo where the dashboard says Tactical RMM and adds the Support | Access switch beside it, without rebuilding the dashboard. If `take-control.sh` has run, its redirect moves to the dashboard's address too.
+
+Run it again with another public name to move the support page, for example to the bare domain once it points at the server. The technician side stays where it is, so people being helped can move without technicians noticing. The script needs nginx's `http_sub_module`, which the nginx.org and Ubuntu packages include.
+
+Technicians sign in to Access. The session is shared across the root domain, so Support works straight away after that, and so does `https://<api-host>/support/manage/`.
 
 ## Unsigned support apps until signing is ready
 
@@ -150,7 +157,7 @@ The publisher validates both platforms, format, provenance fields, version, byte
 Optional `local_settings.py` settings. The name and email are only defaults; anything saved under **Branding** in the console takes priority:
 
 ```python
-SUPPORT_BRAND_NAME = "Tactical RMM"
+SUPPORT_BRAND_NAME = "JustConnect"
 SUPPORT_CONTACT_EMAIL = "support@example.com"
 SUPPORT_INSTALLER_DIR = "/var/lib/tactical-support/installers"
 SUPPORT_MESH_GROUP = "TacticalRMM Support"  # MeshCentral group name or ID

@@ -7,8 +7,11 @@
 .sp-skip { position: fixed; top: -100px; left: 16px; z-index: 50; padding: 8px 12px; border-radius: var(--sh-radius); background: var(--sh-ink); color: var(--sh-bg); font-size: var(--sh-text-sm); }
 .sp-skip:focus { top: 16px; }
 
-/* Brand: the default mark sits beside the name; an uploaded logo stands alone. */
+/* Brand: the JustConnect wordmark by default (a dark-mode copy swaps in through
+   <picture>), the mark beside any other company name, an uploaded logo alone. */
 .sp-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--sh-ink); font-size: var(--sh-text-md); font-weight: 650; letter-spacing: var(--sh-tight); }
+.sp-brand picture { display: contents; }
+.sp-wordmark { display: block; width: auto; height: 40px; }
 .sp-mark { width: 32px; height: 32px; object-fit: contain; }
 .sp-logo { display: block; max-width: 220px; max-height: 48px; width: auto; height: auto; }
 @media (prefers-color-scheme: dark) {
@@ -90,6 +93,11 @@
 .sp-topbar-brand .sp-brand { font-size: var(--sh-text); gap: 8px; min-width: 0; }
 .sp-topbar-brand .sp-brand > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-topbar-brand .sp-mark { width: 24px; height: 24px; }
+.sp-topbar-brand .sp-wordmark { height: 26px; }
+/* Support | Access: this console and the RMM dashboard, one sign-in. */
+.sp-switch { display: flex; flex: none; margin: 0 0 12px; }
+.sp-switch > a { flex: 1; justify-content: center; }
+.sp-switch .sp-icon { width: 15px; height: 15px; }
 .sp-topbar-brand .sp-logo { max-height: 26px; max-width: 170px; }
 .sp-topbar-brand .sp-brand--custom { padding: 0; background: none; }
 .sp-nav-close { display: none; margin-left: auto; }
