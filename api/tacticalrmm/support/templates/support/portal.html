@@ -1,0 +1,79 @@
+{% extends 'support/base.html' %}
+{% block body %}
+<main id="main" class="sp-public">
+  <div class="sp-stack">
+    <section class="sh-card sp-card" aria-labelledby="title">
+      <header class="sp-card-top">{% include 'support/_brand.html' %}</header>
+      {% if grant %}
+      <div class="sp-reveal">
+        <div class="sp-head">
+          <span class="sh-pill sh-pill--ok sp-accepted"><svg class="sp-icon" aria-hidden="true"><use href="#i-check"/></svg>Code accepted</span>
+          <h1 id="title">Download the support app</h1>
+          <p>{% if known_device %}We’ve picked the right version for this computer.{% else %}Choose the version for the computer you need help with.{% endif %}</p>
+        </div>
+        <div id="mobile-note" class="sh-alert sh-alert--warn sp-alert"{% if device != 'mobile' %} hidden{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-monitor"/></svg><span>This looks like a phone or tablet. Open this page on the Windows PC or Mac you need help with.</span></div>
+        {% if error %}<div class="sh-alert sh-alert--error sp-alert" role="alert">{{ error }}</div>{% endif %}
+        <div class="sp-downloads">
+          {% for p in platforms %}
+          {% if p.installer %}
+          <form method="post" action="{% url 'support:download' p.key %}" class="sp-download{% if known_device and not p.recommended %} sp-download--other{% endif %}" data-download data-platform="{{ p.key }}">
+            {% csrf_token %}
+            {% if known_device and not p.recommended %}
+            <button class="sh-btn sh-btn--ghost sh-btn--sm" type="submit">Need the {{ p.name }} version?</button>
+            {% else %}
+            <button class="sh-btn sh-btn--lg sh-btn--block sp-download-btn{% if p.recommended %} sh-btn--primary{% endif %}" type="submit">
+              <svg class="sp-icon sp-icon--fill" aria-hidden="true"><use href="#i-{{ p.key }}"/></svg>
+              <span>Download for {{ p.name }}</span>
+              <svg class="sp-icon sp-trail" aria-hidden="true"><use href="#i-download"/></svg>
+            </button>
+            <p class="sp-meta"><svg class="sp-icon" aria-hidden="true"><use href="#i-shield"/></svg><span>{{ p.audience }}. Signed by {{ p.installer.signer }}.</span></p>
+            {% endif %}
+          </form>
+          {% elif p.recommended or not known_device %}
+          <div class="sh-alert sh-alert--warn sp-alert">The {{ p.name }} version isn’t available yet. Let your technician know.</div>
+          {% endif %}
+          {% endfor %}
+        </div>
+        <p id="download-status" class="sp-status" role="status"></p>
+        <div class="sp-next">
+          <h2>After it downloads</h2>
+          <ol class="sp-steps" data-steps="windows"{% if device == 'macos' %} hidden{% endif %}>
+            <li><span>Open the file you just downloaded. It’s in your Downloads folder.</span></li>
+            <li><span>If Windows asks whether to allow the app, choose <b>Yes</b>.</span></li>
+            <li><span>Leave it open. Your technician will connect from there.</span></li>
+          </ol>
+          <ol class="sp-steps" data-steps="macos"{% if device != 'macos' %} hidden{% endif %}>
+            <li><span>Open the file you just downloaded and follow the installer.</span></li>
+            <li><span>Enter your Mac password if you’re asked for it.</span></li>
+            <li><span>Allow Screen Recording and Accessibility if your Mac asks. Your technician will connect from there.</span></li>
+          </ol>
+        </div>
+        <footer class="sp-card-foot">
+          <form method="post" action="{% url 'support:reset' %}">{% csrf_token %}<button type="submit" class="sh-btn sh-btn--ghost sh-btn--sm">Use a different code</button></form>
+          <span>Your code works until <time datetime="{{ grant_expiry|date:'c' }}" data-local>{{ grant_expiry|date:'H:i T' }}</time></span>
+        </footer>
+      </div>
+      {% else %}
+      <div class="sp-head">
+        <h1 id="title">Get remote support</h1>
+        <p>Enter the 9-digit code your technician gave you, and we’ll get this computer ready for them.</p>
+      </div>
+      <form method="post" action="{% url 'support:portal' %}" class="sp-form" id="access-form" novalidate>
+        {% csrf_token %}
+        <div class="sh-field">
+          <label class="sh-label" for="access-code">Access code</label>
+          <input class="sh-input sp-code" id="access-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="000 000 000" maxlength="20" required autofocus spellcheck="false" autocapitalize="off" aria-describedby="code-error code-hint"{% if error %} aria-invalid="true"{% endif %}>
+          <p class="sp-error" id="code-error" role="alert"{% if not error %} hidden{% endif %}>{{ error }}</p>
+        </div>
+        <button class="sh-btn sh-btn--primary sh-btn--lg sh-btn--block" type="submit"><span>Continue</span><svg class="sp-icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+        <p class="sp-meta sp-meta--center" id="code-hint"><svg class="sp-icon" aria-hidden="true"><use href="#i-shield"/></svg><span>Only use a code from a technician you trust.</span></p>
+      </form>
+      {% endif %}
+    </section>
+    <footer class="sp-foot">
+      {% if grant %}{% include 'support/_contact.html' with lead='Need a hand?' %}{% else %}{% include 'support/_contact.html' with lead='No code yet?' fallback='Ask your technician to send you one.' %}{% endif %}
+      <a class="sp-foot-link" href="{% url 'support:manage' %}">For technicians</a>
+    </footer>
+  </div>
+</main>
+{% endblock %}

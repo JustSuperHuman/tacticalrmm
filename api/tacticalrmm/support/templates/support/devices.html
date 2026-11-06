@@ -1,0 +1,50 @@
+{% extends 'support/base.html' %}
+{% block title %}Support devices{% endblock %}
+{% block body %}
+{% include 'support/_console_top.html' %}
+<main id="main" class="sh-content sp-console">
+  <div class="sh-page-head">
+    <div>
+      <h1>Remote support</h1>
+      <p>Computers connected through the support app. Open one to run commands or move it into monitoring with the full RMM agent.</p>
+    </div>
+  </div>
+  {% include 'support/_tabs.html' %}
+  {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
+  {% if removed %}<div class="sh-alert sh-alert--ok" role="status">Support app removed. That computer won’t connect to the support group again.</div>{% endif %}
+
+  {% if group %}
+    {% if devices %}
+    <div class="sh-table-wrap">
+      <table class="sh-table sp-devices">
+        <thead><tr><th>Computer</th><th>Status</th><th>Monitoring</th><th><span class="sh-sr">Actions</span></th></tr></thead>
+        <tbody>
+        {% for d in devices %}
+          <tr>
+            <td class="sp-who"><b><a href="{% url 'support:device' d.id %}">{{ d.name }}</a></b><span>{{ d.os|default:'Unknown system' }}</span></td>
+            <td>{% if d.online %}<span class="sh-pill sh-pill--ok sh-pill--dot">Online</span>{% else %}<span class="sh-pill sh-pill--dot">Offline</span>{% endif %}</td>
+            <td>{% if d.agent %}<span class="sh-pill sh-pill--accent">Monitored</span>{% elif d.handoff %}<span class="sh-pill sh-pill--warn">Installing</span>{% else %}<span class="sp-quiet">Support only</span>{% endif %}</td>
+            <td class="sp-row-action"><a class="sh-btn sh-btn--sm" href="{% url 'support:device' d.id %}">Open</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="sh-empty">
+      <h3>No computers connected yet</h3>
+      <p>When someone opens the support app, their computer shows up here.</p>
+    </div>
+    {% endif %}
+    {% if can_setup %}
+    <p class="sh-hint sp-group-id">Support apps connect to the MeshCentral group “{{ group.name }}”. Its ID is <code>{{ group.short_id }}</code>. Use it as <code>SUPPORT_MESH_GROUP_ID</code> when you build the support apps.</p>
+    {% endif %}
+  {% elif not error %}
+    <section class="sh-empty">
+      <h3>Set up the support group</h3>
+      <p>Support apps connect to a MeshCentral device group named “{{ group_name }}”. Create it here, then build the support apps for it.</p>
+      {% if can_setup %}<form method="post">{% csrf_token %}<button class="sh-btn sh-btn--primary" type="submit">Create support group</button></form>{% else %}<p>Ask an administrator to set it up.</p>{% endif %}
+    </section>
+  {% endif %}
+</main>
+{% endblock %}

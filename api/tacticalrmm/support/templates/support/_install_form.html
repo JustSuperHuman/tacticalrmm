@@ -1,0 +1,21 @@
+<form method="post" class="sp-form">
+  {% csrf_token %}<input type="hidden" name="action" value="install">
+  <div class="sp-two">
+    <div class="sh-field">
+      <label class="sh-label" for="install-site">Client and site</label>
+      <select class="sh-select" id="install-site" name="site" required>
+        <option value="">Choose a site</option>
+        {% for site in sites %}<option value="{{ site.pk }}"{% if handoff.site_id == site.pk %} selected{% endif %}>{{ site.client.name }} / {{ site.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="sh-field">
+      <label class="sh-label" for="install-type">Type</label>
+      <select class="sh-select" id="install-type" name="agent_type">
+        <option value="workstation"{% if handoff.agent_type != 'server' %} selected{% endif %}>Workstation</option>
+        <option value="server"{% if handoff.agent_type == 'server' %} selected{% endif %}>Server</option>
+      </select>
+    </div>
+  </div>
+  <button class="sh-btn {% if primary %}sh-btn--primary {% endif %}sh-btn--lg sh-btn--block" type="submit"{% if not device.online or not sites %} disabled{% endif %}>Install RMM agent</button>
+  <p class="sh-hint">{% if device.windows %}Windows will ask them to allow it, and may ask for an administrator password.{% else %}Installs in the background. Mac agents need a Tactical RMM code signing token on this server.{% endif %}</p>
+</form>

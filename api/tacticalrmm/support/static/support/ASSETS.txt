@@ -1,0 +1,7 @@
+Tactical RMM logo (default until a custom logo is uploaded in the console): src/assets/trmm_256.png
+from amidaware/tacticalrmm-web v0.101.65.
+https://github.com/amidaware/tacticalrmm-web/blob/v0.101.65/src/assets/trmm_256.png
+
+superhuman/: the JustUI design kit (superhuman.css and Geist / Geist Mono variable fonts, SIL OFL,
+license in superhuman/fonts/OFL.txt). It is a copy; refresh it with the justui install script rather
+than editing it. Page styles live in support.css and use only the kit's tokens.

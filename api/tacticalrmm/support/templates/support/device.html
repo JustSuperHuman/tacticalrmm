@@ -1,0 +1,89 @@
+{% extends 'support/base.html' %}
+{% block title %}{{ device.name|default:'Support device' }}{% endblock %}
+{% block body %}
+{% include 'support/_console_top.html' %}
+<main id="main" class="sh-content sp-console">
+  <a class="sp-back" href="{% url 'support:devices' %}"><svg class="sp-icon" aria-hidden="true"><use href="#i-back"/></svg>All devices</a>
+  {% if device %}
+  <div class="sh-page-head">
+    <div>
+      <h1>{{ device.name }}</h1>
+      <p>{{ device.os|default:'Unknown system' }}</p>
+    </div>
+    <div class="sh-page-actions">{% if device.online %}<span class="sh-pill sh-pill--ok sh-pill--dot">Online</span>{% else %}<span class="sh-pill sh-pill--dot">Offline</span>{% endif %}</div>
+  </div>
+  {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
+  {% if install_sent and not agent %}<div class="sh-alert sh-alert--ok" role="status">{% if device.windows %}Install sent. Ask them to choose Yes on the Windows prompt.{% else %}Install sent. It runs in the background and takes a minute or two.{% endif %}</div>{% endif %}
+
+  <div class="sp-grid sp-grid--even">
+    <section class="sh-card" aria-labelledby="move-title">
+      <header class="sh-card-head">
+        <h2 id="move-title">Move to monitoring</h2>
+        {% if agent %}<span class="sh-pill sh-pill--accent">Monitored</span>{% elif handoff %}<span class="sh-pill sh-pill--warn">Installing</span>{% endif %}
+      </header>
+      <div class="sh-card-pad sp-stack-gap">
+        {% if agent %}
+        <p>This computer is now monitored as <b>{{ agent.hostname }}</b> in {{ handoff.site.client.name }} / {{ handoff.site.name }}.</p>
+        <p class="sh-hint">You can keep working through the RMM agent. The support app isn’t needed any more, so remove it to end this support connection.</p>
+        <div class="sp-actions">
+          <form method="post" data-confirm="Remove the support app from {{ device.name }}? This ends the support connection.">{% csrf_token %}<input type="hidden" name="action" value="remove"><button class="sh-btn sh-btn--primary" type="submit">Remove support app</button></form>
+          <a class="sh-btn" href="{{ dashboard_url }}">Open the dashboard<svg class="sp-icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+        </div>
+        {% elif handoff %}
+        <div class="sp-waiting" data-refresh="15">
+          <span class="sh-spinner" aria-hidden="true"></span>
+          <div><b>Installing in {{ handoff.site.client.name }} / {{ handoff.site.name }}</b><span>Sent at <time datetime="{{ handoff.requested_at|date:'c' }}" data-local>{{ handoff.requested_at|date:'H:i T' }}</time>{% if handoff.requested_by %} by {{ handoff.requested_by.username }}{% endif %}. This page checks for the agent every 15 seconds.</span></div>
+        </div>
+        <p class="sh-hint">{% if device.windows %}They need to choose Yes on the Windows prompt, and may need an administrator password.{% else %}The install runs in the background.{% endif %} If the agent doesn’t appear within a few minutes, check the install log.</p>
+        <div class="sp-actions">
+          {% if can_send %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="shell" value="{{ shells.0.0 }}"><input type="hidden" name="command" value="{{ install_log }}"><button class="sh-btn" type="submit"{% if not device.online %} disabled{% endif %}>Show install log</button></form>{% endif %}
+        </div>
+        <details class="sp-details"><summary>Install again</summary>{% include 'support/_install_form.html' %}</details>
+        {% else %}
+        <p class="sp-lead">Install the full RMM agent so this computer is monitored and managed from the dashboard.</p>
+        {% include 'support/_install_form.html' with primary=True %}
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="sh-card" aria-labelledby="run-title">
+      <header class="sh-card-head"><h2 id="run-title">Run a command</h2></header>
+      {% if can_send %}
+      <form method="post" class="sh-card-pad sp-form">
+        {% csrf_token %}<input type="hidden" name="action" value="run">
+        {% if shells|length > 1 %}
+        <div class="sh-field">
+          <label class="sh-label" for="shell">Shell</label>
+          <select class="sh-select" id="shell" name="shell">{% for value, label in shells %}<option value="{{ value }}"{% if shell == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        </div>
+        {% else %}<input type="hidden" name="shell" value="{{ shells.0.0 }}">{% endif %}
+        <div class="sh-field">
+          <label class="sh-label" for="command">Command</label>
+          <textarea class="sh-textarea sp-command" id="command" name="command" rows="4" spellcheck="false" autocapitalize="off" placeholder="{% if device.windows %}Get-ComputerInfo | Select-Object OsName, OsVersion{% else %}sw_vers{% endif %}">{{ command|default:'' }}</textarea>
+          <p class="sh-hint">{% if device.windows %}Runs as the person who opened the support app, without administrator rights.{% else %}Runs as root.{% endif %} Output shows up below.</p>
+        </div>
+        <div class="sp-form-foot"><button class="sh-btn" type="submit"{% if not device.online %} disabled{% endif %}>Run command</button></div>
+      </form>
+      {% if output is not None %}
+      <div class="sp-output{% if no_reply %} sp-output--quiet{% endif %}" role="status">
+        <div class="sp-output-head">{% if no_reply %}No reply{% else %}Output{% endif %}</div>
+        <pre>{{ output|default:'(no output)' }}</pre>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="sh-card-pad"><p class="sh-hint">You need permission to send commands to run them here.</p></div>
+      {% endif %}
+    </section>
+  </div>
+
+  {% if not agent %}
+  <section class="sp-end">
+    <div><h2>Done helping?</h2><p class="sh-hint">Remove the support app so this computer stops connecting to the support group.</p></div>
+    <form method="post" data-confirm="Remove the support app from {{ device.name }}? This ends the support connection.">{% csrf_token %}<input type="hidden" name="action" value="remove"><button class="sh-btn sh-btn--danger" type="submit">Remove support app</button></form>
+  </section>
+  {% endif %}
+  {% elif error %}
+  <div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>
+  {% endif %}
+</main>
+{% endblock %}

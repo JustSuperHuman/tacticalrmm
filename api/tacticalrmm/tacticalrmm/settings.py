@@ -289,6 +289,7 @@ INSTALLED_APPS = [
     "winupdate",
     "software",
     "core",
+    "support",
     "automation",
     "autotasks",
     "logs",

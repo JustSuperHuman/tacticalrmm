@@ -27,6 +27,7 @@ EXCLUDE_PATHS = (
     f"/{settings.ADMIN_URL}",
     "/logout",
     "/agents/installer",
+    "/support/",  # Django session views record support actions explicitly.
     "/api/schema",
     "/accounts/ssoproviders/token",
     "/_allauth/browser/v1/config",

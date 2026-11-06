@@ -1,0 +1,192 @@
+/* Support page and technician console.
+   Built on the JustUI kit (superhuman/superhuman.css). Tokens only; light and dark follow the system. */
+
+.sp-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sp-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sp-icon--fill { fill: currentColor; stroke: none; }
+.sp-skip { position: fixed; top: -100px; left: 16px; z-index: 50; padding: 8px 12px; border-radius: var(--sh-radius); background: var(--sh-ink); color: var(--sh-bg); font-size: var(--sh-text-sm); }
+.sp-skip:focus { top: 16px; }
+
+/* Brand: the default mark sits beside the name; an uploaded logo stands alone. */
+.sp-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--sh-ink); font-size: var(--sh-text-md); font-weight: 650; letter-spacing: var(--sh-tight); }
+.sp-mark { width: 32px; height: 32px; object-fit: contain; }
+.sp-logo { display: block; max-width: 220px; max-height: 48px; width: auto; height: auto; }
+@media (prefers-color-scheme: dark) {
+  /* Most logos are drawn for light backgrounds, so dark mode puts them on a light chip. */
+  :root:not([data-theme="light"]) .sp-brand--custom { padding: 6px 10px; border-radius: var(--sh-radius); background: white; }
+}
+
+/* ---------- Public page ---------- */
+.sp-public {
+  min-height: 100dvh; display: grid; place-items: center; padding: 48px 16px;
+  background: radial-gradient(1200px 500px at 50% -10%, color-mix(in srgb, var(--sh-accent) 9%, transparent), transparent 70%), var(--sh-bg);
+}
+.sp-stack { width: min(100%, 420px); display: grid; gap: 20px; }
+.sp-card { padding: 32px 28px 24px; border-radius: var(--sh-radius-xl); box-shadow: var(--sh-shadow); }
+.sp-card-top { display: flex; justify-content: center; margin-bottom: 28px; }
+.sp-head { display: grid; justify-items: center; gap: 8px; text-align: center; margin-bottom: 24px; }
+.sp-head p { color: var(--sh-muted); max-width: 34ch; }
+.sp-accepted { margin-bottom: 4px; }
+.sp-accepted .sp-icon { width: 13px; height: 13px; stroke-width: 2.4; }
+
+.sp-form { display: grid; gap: 16px; }
+.sp-code {
+  height: 56px; padding: 0 16px; text-align: center;
+  font-size: 26px; font-weight: 550; letter-spacing: .14em; font-variant-numeric: tabular-nums;
+}
+.sp-code::placeholder { letter-spacing: .14em; }
+.sp-error { font-size: var(--sh-text-sm); color: var(--sh-danger); }
+.sp-meta { display: flex; align-items: flex-start; gap: 6px; font-size: var(--sh-text-xs); color: var(--sh-muted); }
+.sp-meta .sp-icon { width: 14px; height: 14px; margin-top: 1px; }
+.sp-meta span { overflow-wrap: anywhere; }
+.sp-meta--center { justify-content: center; text-align: center; }
+
+.sp-alert { margin-bottom: 16px; align-items: flex-start; }
+.sp-alert .sp-icon { margin-top: 2px; }
+.sp-downloads { display: grid; gap: 16px; }
+.sp-download { display: grid; gap: 8px; }
+.sp-download--other { justify-items: center; margin-top: -6px; }
+.sp-download-btn { height: 52px; gap: 12px; padding: 0 16px; font-size: var(--sh-text-md); }
+.sp-download-btn .sp-icon { width: 20px; height: 20px; }
+.sp-download-btn span { flex: 1; text-align: left; }
+.sp-download-btn .sp-trail { width: 18px; height: 18px; opacity: .85; }
+.sp-status { font-size: var(--sh-text-sm); color: var(--sh-ok); text-align: center; }
+.sp-status:not(:empty) { margin-top: 12px; }
+
+.sp-next { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--sh-line); }
+.sp-next h2 { font-size: var(--sh-text); margin-bottom: 12px; }
+.sp-steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 12px; }
+.sp-steps li { counter-increment: step; display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; color: var(--sh-ink-2); }
+.sp-steps li::before {
+  content: counter(step); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--sh-accent-soft); color: var(--sh-accent-text); font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.sp-steps b { font-weight: 600; color: var(--sh-ink); }
+
+.sp-card-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--sh-line);
+  font-size: var(--sh-text-xs); color: var(--sh-muted); font-variant-numeric: tabular-nums;
+}
+.sp-card-foot .sh-btn { margin-left: -10px; }
+
+.sp-foot { display: grid; justify-items: center; gap: 8px; text-align: center; font-size: var(--sh-text-sm); color: var(--sh-muted); }
+.sp-foot-line { max-width: 40ch; }
+.sp-foot-link { font-size: var(--sh-text-xs); color: var(--sh-faint); }
+.sp-foot-link:hover { color: var(--sh-ink-2); }
+
+/* The one orchestrated moment: the download step settles in after a code is accepted. */
+@media (prefers-reduced-motion: no-preference) {
+  .sp-reveal { animation: sp-rise var(--sh-med) var(--sh-ease) both; }
+  .sp-accepted .sp-icon { animation: sp-pop 360ms var(--sh-ease) 80ms both; }
+}
+@keyframes sp-rise { from { opacity: 0; transform: translateY(6px); } }
+@keyframes sp-pop { from { transform: scale(.4); opacity: 0; } }
+
+/* ---------- Technician console ---------- */
+.sp-topbar-brand { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--sh-ink); text-decoration: none; }
+.sp-topbar-brand:hover { text-decoration: none; }
+.sp-topbar-brand .sp-brand { font-size: var(--sh-text); gap: 8px; }
+.sp-topbar-brand .sp-mark { width: 24px; height: 24px; }
+.sp-topbar-brand .sp-logo { max-height: 26px; max-width: 160px; }
+.sp-topbar-brand .sp-brand--custom { padding: 0; background: none; }
+.sp-crumb-sep { color: var(--sh-faint); }
+.sp-crumb { font-size: var(--sh-text); font-weight: 550; white-space: nowrap; }
+
+.sp-console .sh-page-head p { max-width: 70ch; overflow-wrap: anywhere; }
+.sp-grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.sp-grid--even { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sp-col { display: grid; gap: 16px; min-width: 0; }
+.sp-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sp-optional { margin-left: 6px; font-weight: 400; color: var(--sh-faint); }
+.sp-form-foot { display: flex; justify-content: flex-end; }
+
+.sp-new { border-color: color-mix(in srgb, var(--sh-ok) 40%, var(--sh-line)); }
+.sp-new h2 { display: flex; align-items: center; gap: 8px; color: var(--sh-ok); }
+.sp-new-code { display: block; margin: 10px 0 6px; font-size: 32px; font-weight: 650; letter-spacing: .08em; font-variant-numeric: tabular-nums; color: var(--sh-ink); }
+.sp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+
+.sp-section-head { display: grid; gap: 4px; }
+.sp-codes td { white-space: nowrap; }
+.sp-who b { display: block; font-weight: 550; white-space: normal; overflow-wrap: anywhere; }
+.sp-who span { display: block; font-size: var(--sh-text-xs); color: var(--sh-muted); white-space: normal; overflow-wrap: anywhere; }
+.sp-code-cell { font-family: var(--sh-mono); font-size: 12.5px; color: var(--sh-ink-2); }
+.sp-expires { color: var(--sh-ink-2); font-variant-numeric: tabular-nums; }
+.sp-row-action { text-align: right; }
+
+.sp-apps { list-style: none; margin: 0; padding: 4px 20px; }
+.sp-apps li { display: flex; align-items: center; gap: 12px; padding: 14px 0; }
+.sp-apps li + li { border-top: 1px solid var(--sh-line); }
+.sp-apps li > div { flex: 1; min-width: 0; }
+.sp-apps b { display: block; font-weight: 550; }
+.sp-apps li > div span { display: block; font-size: var(--sh-text-xs); color: var(--sh-muted); overflow-wrap: anywhere; }
+.sp-tile { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--sh-accent) 10%, transparent); color: var(--sh-accent-text); flex: none; }
+.sp-tile .sp-icon { width: 18px; height: 18px; }
+
+.sp-logo-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 16px; align-items: start; }
+.sp-logo-preview { display: grid; place-items: center; height: 84px; padding: 12px; border-radius: var(--sh-radius); background: var(--sh-surface-2); border: 1px solid var(--sh-line); }
+.sp-logo-preview img { max-width: 100%; max-height: 56px; object-fit: contain; }
+.sp-file { font-size: var(--sh-text-sm); color: var(--sh-ink-2); max-width: 100%; }
+.sp-file::file-selector-button {
+  height: 30px; margin-right: 10px; padding: 0 11px; border: 1px solid var(--sh-line-strong); border-radius: var(--sh-radius-sm);
+  background: var(--sh-surface); color: var(--sh-ink); font: 500 var(--sh-text-xs)/1 var(--sh-font); cursor: pointer;
+}
+.sp-file::file-selector-button:hover { background: var(--sh-surface-2); }
+
+/* Devices */
+.sp-quiet { color: var(--sh-faint); font-size: var(--sh-text-xs); }
+.sp-who a { color: var(--sh-ink); }
+.sp-group-id code { padding: 1px 5px; border-radius: var(--sh-radius-sm); background: var(--sh-surface-3); color: var(--sh-ink-2); overflow-wrap: anywhere; }
+.sp-back { display: inline-flex; align-items: center; gap: 6px; width: fit-content; margin-bottom: -12px; font-size: var(--sh-text-sm); color: var(--sh-muted); }
+.sp-back:hover { color: var(--sh-ink); text-decoration: none; }
+.sp-stack-gap { display: grid; gap: 14px; }
+.sp-lead { color: var(--sh-ink-2); }
+.sp-waiting { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: var(--sh-radius); background: var(--sh-warn-soft); color: var(--sh-warn); }
+.sp-waiting .sh-spinner { margin-top: 2px; }
+.sp-waiting b { display: block; font-weight: 600; }
+.sp-waiting span { display: block; font-size: var(--sh-text-xs); color: var(--sh-ink-2); }
+.sp-details summary { cursor: pointer; width: fit-content; font-size: var(--sh-text-sm); color: var(--sh-muted); }
+.sp-details summary:hover { color: var(--sh-ink); }
+.sp-details[open] summary { margin-bottom: 14px; }
+.sp-command { min-height: 96px; padding: 9px 11px; font-family: var(--sh-mono); font-size: 12.5px; line-height: 1.55; resize: vertical; }
+/* Code and logs are always dark, in both themes. */
+.sp-output { margin: 0 20px 20px; border-radius: var(--sh-radius); background: #0b0d10; overflow: hidden; }
+.sp-output-head { padding: 7px 12px; background: #15181d; color: #8b93a1; font-family: var(--sh-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.sp-output pre { margin: 0; max-height: 420px; overflow: auto; padding: 12px; color: #d7dce4; font-family: var(--sh-mono); font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sp-output--quiet pre { color: #8b93a1; }
+.sp-end { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 20px; border: 1px solid color-mix(in srgb, var(--sh-danger) 25%, var(--sh-line)); border-radius: var(--sh-radius-lg); }
+.sp-end h2 { margin-bottom: 2px; }
+
+@media (max-width: 960px) {
+  .sp-grid, .sp-grid--even { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .sp-hide-phone { display: none; }
+  .sp-crumb-sep, .sp-crumb { display: none; }
+  .sp-two, .sp-logo-row { grid-template-columns: minmax(0, 1fr); }
+  .sh-input, .sh-select { font-size: 16px; }
+  .sp-code { font-size: 24px; }
+  /* Code rows stack so nothing scrolls sideways. */
+  .sp-codes thead { display: none; }
+  .sp-codes, .sp-codes tbody, .sp-codes tr { display: block; }
+  .sp-codes tr { position: relative; padding: 12px 14px; border-bottom: 1px solid var(--sh-line); }
+  .sp-codes tr:last-child { border-bottom: 0; }
+  .sp-codes td { display: inline; padding: 0; border: 0; background: none !important; }
+  .sp-codes td.sp-who { display: block; padding-right: 96px; margin-bottom: 6px; }
+  .sp-codes td.sp-code-cell, .sp-codes td.num, .sp-codes td.sp-expires { font-size: var(--sh-text-xs); color: var(--sh-muted); margin-right: 12px; }
+  .sp-codes td:nth-child(5) { position: absolute; top: 12px; right: 14px; }
+  .sp-codes td.sp-row-action { display: block; margin-top: 10px; text-align: left; }
+  .sp-codes td.sp-row-action:empty { display: none; }
+  .sp-devices thead { display: none; }
+  .sp-devices, .sp-devices tbody, .sp-devices tr { display: block; }
+  .sp-devices tr { padding: 12px 14px; border-bottom: 1px solid var(--sh-line); }
+  .sp-devices tr:last-child { border-bottom: 0; }
+  .sp-devices td { display: inline-block; padding: 0 8px 0 0; border: 0; background: none !important; }
+  .sp-devices td.sp-who { display: block; margin-bottom: 8px; }
+  .sp-devices td.sp-row-action { display: none; }
+  .sp-output { margin: 0 16px 16px; }
+}
+@media (max-width: 400px) {
+  .sp-card { padding: 24px 18px 20px; }
+  .sp-code { font-size: 22px; letter-spacing: .1em; }
+}

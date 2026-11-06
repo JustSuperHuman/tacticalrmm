@@ -1,6 +1,8 @@
 .DS_Store
 .quasar
 node_modules
+.venv/
+.impeccable/review/
 /dist
 web/dist
 .env.local
@@ -61,3 +63,4 @@ query_schema.json
 gunicorn_config.py
 set_local_config.py
 api/tacticalrmm/tacticalrmm/private/exe/mesh*
+api/tacticalrmm/tacticalrmm/private/exe/support/

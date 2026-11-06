@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           check-latest: true
@@ -67,6 +67,9 @@ jobs:
               exit 1
           fi
 
+      - name: Test support installer packaging
+        run: python -m unittest discover -s packaging/support -p 'test_*.py'
+
       - name: Run django tests
         env:
           GHACTIONS: "yes"
@@ -77,7 +80,7 @@ jobs:
               exit 1
           fi
 
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
         with:
           directory: ./api/tacticalrmm
           files: ./api/tacticalrmm/coverage.xml

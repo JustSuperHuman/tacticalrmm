@@ -53,3 +53,7 @@ Demo database resets every hour. A lot of features are disabled for obvious reas
 ## Installation / Backup / Restore / Usage
 
 ### Refer to the [documentation](https://docs.tacticalrmm.com)
+
+## Public remote support
+
+A branded public support page and technician access-code console are available at `/support/` and `/support/manage/` on the API host. See [support setup](docs/support.md) for Windows signing with Azure, Mac signing and notarization, installer publishing, and permissions.

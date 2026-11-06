@@ -1,0 +1,163 @@
+{% extends 'support/base.html' %}
+{% block title %}Support codes{% endblock %}
+{% block body %}
+{% if can_manage %}
+{% include 'support/_console_top.html' %}
+<main id="main" class="sh-content sp-console">
+  <div class="sh-page-head">
+    <div>
+      <h1>Remote support</h1>
+      <p>Create a code and share it. The person you’re helping enters it at <a href="{{ portal_url }}" target="_blank" rel="noopener">{{ portal_url }}</a> to download the support app.</p>
+    </div>
+  </div>
+  {% include 'support/_tabs.html' %}
+  {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
+  {% if branding_saved %}<div class="sh-alert sh-alert--ok" role="status">Branding saved. The support page is showing it now.</div>{% endif %}
+
+  <div class="sp-grid">
+    <div class="sp-col">
+      {% if new_code %}
+      <section class="sh-card sp-new" aria-labelledby="new-title">
+        <div class="sh-card-pad">
+          <h2 id="new-title"><svg class="sp-icon" aria-hidden="true"><use href="#i-check"/></svg>Your code is ready</h2>
+          <output id="new-code" class="sp-new-code">{{ new_code }}</output>
+          <p class="sh-hint">It works for {{ new_lifetime }}. You won’t see the full code again, so share it now.</p>
+          <div class="sp-actions">
+            <button class="sh-btn" type="button" data-copy="{{ new_code }}"><svg class="sp-icon" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy code</span></button>
+            <button class="sh-btn" type="button" data-copy="Go to {{ portal_url }} and enter the code {{ new_code }}. It works for the next {{ new_lifetime }}."><svg class="sp-icon" aria-hidden="true"><use href="#i-send"/></svg><span>Copy invitation</span></button>
+          </div>
+          <p id="copy-status" class="sh-sr" role="status"></p>
+        </div>
+      </section>
+      {% endif %}
+      <section class="sh-card" aria-labelledby="create-title">
+        <header class="sh-card-head"><h2 id="create-title">New code</h2></header>
+        <form method="post" class="sh-card-pad sp-form">
+          {% csrf_token %}<input type="hidden" name="action" value="create">
+          <div class="sh-field">
+            <label class="sh-label" for="site">Client and site</label>
+            <select class="sh-select" id="site" name="site" required{% if create_form.site.errors %} aria-invalid="true"{% endif %}>
+              <option value="">Choose a site</option>
+              {% for site in sites %}<option value="{{ site.pk }}"{% if create_form.site.value|stringformat:'s' == site.pk|stringformat:'s' %} selected{% endif %}>{{ site.client.name }} / {{ site.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="sh-field">
+            <label class="sh-label" for="label">Who it’s for <span class="sp-optional">Optional</span></label>
+            <input class="sh-input" id="label" name="label" maxlength="100" placeholder="Dana at the front desk" value="{{ create_form.label.value|default_if_none:'' }}">
+          </div>
+          <div class="sp-two">
+            <div class="sh-field">
+              <label class="sh-label" for="lifetime">Expires after</label>
+              <select class="sh-select" id="lifetime" name="lifetime">{% for value, text in create_form.fields.lifetime.choices %}<option value="{{ value }}"{% if create_form.lifetime.value|stringformat:'s' == value|stringformat:'s' %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+            </div>
+            <div class="sh-field">
+              <label class="sh-label" for="max-downloads">Download limit</label>
+              <input class="sh-input" id="max-downloads" name="max_downloads" type="number" min="1" max="20" value="{{ create_form.max_downloads.value|default:5 }}" required{% if create_form.max_downloads.errors %} aria-invalid="true"{% endif %}>
+            </div>
+          </div>
+          {% if create_form.errors %}<p class="sp-error" role="alert">Choose a site, an expiry, and a download limit from 1 to 20.</p>{% endif %}
+          <button class="sh-btn sh-btn--primary sh-btn--lg sh-btn--block" type="submit"{% if not sites %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-key"/></svg>Create code</button>
+          {% if not sites %}<p class="sh-hint">You need access to at least one client site to create a code.</p>{% endif %}
+        </form>
+      </section>
+    </div>
+
+    <section class="sp-col" aria-labelledby="codes-title">
+      <div class="sp-section-head">
+        <h2 id="codes-title">Recent codes</h2>
+        <p class="sh-hint">Revoking a code stops new downloads. It won’t disconnect an app that’s already running.</p>
+      </div>
+      {% if codes %}
+      <div class="sh-table-wrap">
+        <table class="sh-table sp-codes">
+          <thead><tr><th>For</th><th>Code</th><th class="num">Downloads</th><th>Expires</th><th>Status</th><th><span class="sh-sr">Actions</span></th></tr></thead>
+          <tbody>
+          {% for code in codes %}
+            <tr>
+              <td class="sp-who"><b>{{ code.label|default:'Support code' }}</b><span>{{ code.site.client.name }} / {{ code.site.name }}</span></td>
+              <td class="sp-code-cell"><span class="sh-sr">Ends in </span><span aria-hidden="true">••• ••• </span>{{ code.last_three }}</td>
+              <td class="num">{{ code.download_count }} of {{ code.max_downloads }}</td>
+              <td class="sp-expires"><time datetime="{{ code.expires_at|date:'c' }}" data-local>{{ code.expires_at|date:'M j, H:i T' }}</time></td>
+              <td><span class="sh-pill sh-pill--dot{% if code.status == 'Active' %} sh-pill--ok{% elif code.status == 'Revoked' %} sh-pill--danger{% endif %}">{{ code.status }}</span></td>
+              <td class="sp-row-action">{% if code.status == 'Active' %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="revoke"><input type="hidden" name="invitation" value="{{ code.pk }}"><button class="sh-btn sh-btn--danger sh-btn--sm" type="submit">Revoke</button></form>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="sh-empty">
+        <h3>No codes yet</h3>
+        <p>Create a code for the person you’re helping. You can track and revoke it here.</p>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="sp-grid sp-grid--even">
+    <section class="sh-card" aria-labelledby="apps-title">
+      <header class="sh-card-head"><h2 id="apps-title">Support apps</h2></header>
+      <ul class="sp-apps">
+        {% for p in platforms %}
+        <li>
+          <span class="sp-tile"><svg class="sp-icon sp-icon--fill" aria-hidden="true"><use href="#i-{{ p.key }}"/></svg></span>
+          <div><b>{{ p.name }}</b><span>{% if p.installer %}Version {{ p.installer.version }}, signed by {{ p.installer.signer }}{% else %}Not published yet. The setup guide shows how to build and publish it.{% endif %}</span></div>
+          {% if p.installer %}<span class="sh-pill sh-pill--ok sh-pill--dot">Ready</span>{% else %}<span class="sh-pill sh-pill--warn">Missing</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    {% if can_brand %}
+    <section class="sh-card" aria-labelledby="brand-title">
+      <header class="sh-card-head"><h2 id="brand-title">Branding</h2><span class="sh-hint">Shown on the support page</span></header>
+      <form method="post" enctype="multipart/form-data" class="sh-card-pad sp-form">
+        {% csrf_token %}<input type="hidden" name="action" value="branding">
+        <div class="sp-logo-row">
+          <div class="sp-logo-preview"><img id="logo-preview" src="{{ brand.logo_url }}" alt="Current logo"></div>
+          <div class="sh-field">
+            <label class="sh-label" for="logo">Logo</label>
+            <input class="sp-file" id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" aria-describedby="logo-hint"{% if branding_form.logo.errors %} aria-invalid="true"{% endif %}>
+            {% if branding_form.logo.errors %}<p class="sp-error" role="alert">{{ branding_form.logo.errors.0 }}</p>{% endif %}
+            <p class="sh-hint" id="logo-hint">PNG, JPEG, WebP or SVG up to 512 KB. A wide logo on a transparent background works best.</p>
+            {% if brand.custom_logo %}<label class="sh-check"><input type="checkbox" name="remove_logo"> Use the default logo</label>{% endif %}
+          </div>
+        </div>
+        <div class="sh-field">
+          <label class="sh-label" for="brand-name">Company name</label>
+          <input class="sh-input" id="brand-name" name="name" maxlength="100" placeholder="{{ brand.default_name }}" value="{{ branding_form.name.value|default_if_none:'' }}">
+        </div>
+        <div class="sp-two">
+          <div class="sh-field">
+            <label class="sh-label" for="brand-phone">Help phone</label>
+            <input class="sh-input" id="brand-phone" name="contact_phone" type="tel" maxlength="40" placeholder="(555) 010-0100" value="{{ branding_form.contact_phone.value|default_if_none:'' }}">
+          </div>
+          <div class="sh-field">
+            <label class="sh-label" for="brand-email">Help email</label>
+            <input class="sh-input" id="brand-email" name="contact_email" type="email" placeholder="help@example.com" value="{{ branding_form.contact_email.value|default_if_none:'' }}"{% if branding_form.contact_email.errors %} aria-invalid="true"{% endif %}>
+            {% if branding_form.contact_email.errors %}<p class="sp-error" role="alert">Enter a full email address, like help@example.com.</p>{% endif %}
+          </div>
+        </div>
+        <p class="sh-hint">People without a code see the phone and email so they can reach you.</p>
+        <div class="sp-form-foot"><button class="sh-btn" type="submit">Save branding</button></div>
+      </form>
+    </section>
+    {% endif %}
+  </div>
+</main>
+{% else %}
+<main id="main" class="sp-public">
+  <div class="sp-stack">
+    <section class="sh-card sp-card" aria-labelledby="title">
+      <header class="sp-card-top">{% include 'support/_brand.html' %}</header>
+      <div class="sp-head">
+        <h1 id="title">{% if signed_in %}You need technician access{% else %}Sign in to create support codes{% endif %}</h1>
+        <p>{% if signed_in %}Your role needs the Install agents and Use MeshCentral permissions. Ask an administrator to add them.{% else %}Sign in to the dashboard, then come back to this page.{% endif %}</p>
+      </div>
+      <a class="sh-btn sh-btn--primary sh-btn--lg sh-btn--block" href="{{ dashboard_url }}"><span>Open the dashboard</span><svg class="sp-icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </section>
+    <footer class="sp-foot"><a class="sp-foot-link" href="{% url 'support:portal' %}">Go to the public support page</a></footer>
+  </div>
+</main>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,182 @@
+name: Signed support installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Support release version (for example 1.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: support-installers
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    environment: support-signing
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SUPPORT_VERSION: ${{ inputs.version }}
+      SUPPORT_MESH_URL: ${{ vars.SUPPORT_MESH_URL }}
+      SUPPORT_MESH_GROUP_ID: ${{ secrets.SUPPORT_MESH_GROUP_ID }}
+      SUPPORT_MESH_DOWNLOAD_KEY: ${{ secrets.SUPPORT_MESH_DOWNLOAD_KEY }}
+      SUPPORT_MESH_DOWNLOAD_COOKIE: ${{ secrets.SUPPORT_MESH_DOWNLOAD_COOKIE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch configured Windows support tool
+        run: |
+          python -m pip install requests==2.34.2
+          python packaging/support/fetch_installer.py --platform windows --output payload/MeshAgent.exe
+      - name: Authenticate to Azure with OpenID Connect
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign the Windows client payload
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_CERTIFICATE_PROFILE }}
+          files-folder: ${{ github.workspace }}\payload
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Build the interactive Windows installer
+        shell: pwsh
+        run: |
+          $payloadSignature = Get-AuthenticodeSignature -LiteralPath payload/MeshAgent.exe
+          if ($payloadSignature.Status -ne 'Valid') { throw 'The client payload signature is invalid.' }
+          choco install innosetup --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install Inno Setup.' }
+          python packaging/support/build_windows.py
+      - name: Sign the final Windows installer
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_CERTIFICATE_PROFILE }}
+          files-folder: ${{ github.workspace }}\release
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Verify signature and record final file digest
+        shell: pwsh
+        run: |
+          $signature = Get-AuthenticodeSignature -LiteralPath release/TacticalSupport-windows.exe
+          if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate -or -not $signature.TimeStamperCertificate) {
+            throw 'The Windows support tool must have a valid, timestamped Authenticode signature.'
+          }
+          python packaging/support/manifest.py --directory release --platform windows --version $env:SUPPORT_VERSION --signer $signature.SignerCertificate.Subject
+      - uses: actions/upload-artifact@v4
+        with:
+          name: support-windows
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
+
+  macos:
+    runs-on: macos-latest
+    environment: support-signing
+    env:
+      SUPPORT_VERSION: ${{ inputs.version }}
+      SUPPORT_MESH_URL: ${{ vars.SUPPORT_MESH_URL }}
+      SUPPORT_MESH_GROUP_ID: ${{ secrets.SUPPORT_MESH_GROUP_ID }}
+      SUPPORT_MESH_DOWNLOAD_KEY: ${{ secrets.SUPPORT_MESH_DOWNLOAD_KEY }}
+      SUPPORT_MESH_DOWNLOAD_COOKIE: ${{ secrets.SUPPORT_MESH_DOWNLOAD_COOKIE }}
+      APPLE_APPLICATION_IDENTITY: ${{ vars.APPLE_APPLICATION_IDENTITY }}
+      APPLE_INSTALLER_IDENTITY: ${{ vars.APPLE_INSTALLER_IDENTITY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Fetch configured universal Mac package
+        run: |
+          python -m pip install requests==2.34.2
+          python packaging/support/fetch_installer.py --platform macos --output unsigned/TacticalSupport.pkg
+      - name: Import Developer ID certificates into an ephemeral keychain
+        env:
+          APPLICATION_P12: ${{ secrets.APPLE_APPLICATION_CERTIFICATE_BASE64 }}
+          INSTALLER_P12: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_BASE64 }}
+          APPLICATION_PASSWORD: ${{ secrets.APPLE_APPLICATION_CERTIFICATE_PASSWORD }}
+          INSTALLER_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          SUPPORT_KEYCHAIN="$RUNNER_TEMP/support-signing.keychain-db"
+          SUPPORT_KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          echo "::add-mask::$SUPPORT_KEYCHAIN_PASSWORD"
+          echo "SUPPORT_KEYCHAIN=$SUPPORT_KEYCHAIN" >> "$GITHUB_ENV"
+          printf '%s' "$APPLICATION_P12" | base64 --decode > "$RUNNER_TEMP/application.p12"
+          printf '%s' "$INSTALLER_P12" | base64 --decode > "$RUNNER_TEMP/installer.p12"
+          security create-keychain -p "$SUPPORT_KEYCHAIN_PASSWORD" "$SUPPORT_KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$SUPPORT_KEYCHAIN"
+          security unlock-keychain -p "$SUPPORT_KEYCHAIN_PASSWORD" "$SUPPORT_KEYCHAIN"
+          security import "$RUNNER_TEMP/application.p12" -P "$APPLICATION_PASSWORD" -k "$SUPPORT_KEYCHAIN" -T /usr/bin/codesign
+          security import "$RUNNER_TEMP/installer.p12" -P "$INSTALLER_PASSWORD" -k "$SUPPORT_KEYCHAIN" -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$SUPPORT_KEYCHAIN_PASSWORD" "$SUPPORT_KEYCHAIN"
+          security list-keychains -d user -s "$SUPPORT_KEYCHAIN" login.keychain-db
+      - name: Sign executables and the installer package
+        run: python packaging/support/sign_macos.py unsigned/TacticalSupport.pkg release/TacticalSupport-macos.pkg
+      - name: Notarize, staple, and verify the Mac package
+        env:
+          NOTARY_KEY: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+          chmod 600 "$RUNNER_TEMP/notary.p8"
+          xcrun notarytool submit release/TacticalSupport-macos.pkg --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait --output-format json > "$RUNNER_TEMP/notary-result.json"
+          python -c 'import json,os,pathlib; r=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"notary-result.json").read_text()); assert r["status"] == "Accepted", "Apple notarization did not accept the package"'
+          xcrun stapler staple release/TacticalSupport-macos.pkg
+          xcrun stapler validate release/TacticalSupport-macos.pkg
+          pkgutil --check-signature release/TacticalSupport-macos.pkg
+          spctl --assess --type install --verbose=2 release/TacticalSupport-macos.pkg
+          python packaging/support/manifest.py --directory release --platform macos --version "$SUPPORT_VERSION" --signer "$APPLE_INSTALLER_IDENTITY"
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/support-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/application.p12" "$RUNNER_TEMP/installer.p12" "$RUNNER_TEMP/notary.p8"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: support-macos
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
+
+  bundle:
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: support-*
+          merge-multiple: true
+          path: release/
+      - name: Assemble the verified release manifest
+        run: python packaging/support/manifest.py --directory release --combine
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-support-installers
+          path: release/
+          if-no-files-found: error
+          retention-days: 30
