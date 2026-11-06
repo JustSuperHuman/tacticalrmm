@@ -194,7 +194,9 @@ def agent_relay(request, agent_id):
             409,
         )
     try:
-        relay = mesh.desktop_relay(agent.mesh_node_id, request.user, grant=False)
+        relay = mesh.desktop_relay(
+            mesh.node_id(agent.mesh_node_id), request.user, grant=False
+        )
     except mesh.MeshError as exc:
         return _json({"error": str(exc)}, 503)
     AuditLog.audit_mesh_session(

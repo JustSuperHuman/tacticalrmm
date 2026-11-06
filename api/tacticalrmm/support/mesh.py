@@ -16,7 +16,7 @@ from django.conf import settings
 from meshctrl.utils import get_auth_token, get_login_token
 from websockets.exceptions import WebSocketException
 
-from core.utils import get_core_settings, get_mesh_ws_url
+from core.utils import _b64_to_hex, get_core_settings, get_mesh_ws_url
 from tacticalrmm.constants import TRMM_WS_MAX_SIZE
 
 RESPONSE_ID = "trmm-support"
@@ -244,6 +244,18 @@ def remove_device(device):
         _action("removedevices"),
         timeout=10,
     )
+
+
+def node_id(value):
+    """MeshCentral's own form of a computer's id ("node//" and base64).
+
+    Tactical RMM stores agents' ids as 96 hex characters. MeshCentral's web page
+    accepts those, but its tunnel requests only accept its own form.
+    """
+    value = (value or "").strip()
+    if re.fullmatch(r"[0-9A-Fa-f]{96}", value):
+        return "node//" + _b64_to_hex(value)
+    return value
 
 
 def identity(user, node_id, grant=True):

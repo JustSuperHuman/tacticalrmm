@@ -23,6 +23,12 @@ CORE = type(
     },
 )()
 RELAY = "wss://mesh.example.com/meshrelay.ashx?browser=1&p=2&nodeid=node//x&id=1&auth=c"
+# A real agent's id as Tactical RMM stores it, and as MeshCentral knows it.
+AGENT_HEX = (
+    "E5697EC547290EE78C8585D32DFCD15C01222CC74F66BDB5"
+    "39D21DA89297E1DD505D5227941B4E6146D65F3631D87927"
+)
+AGENT_NODE = "node//5Wl@xUcpDueMhYXTLfzRXAEiLMdPZr21OdIdqJKX4d1QXVInlBtOYUbWXzYx2Hkn"
 
 
 @override_settings(**TEST_SETTINGS)
@@ -118,7 +124,8 @@ class AgentViewerTests(TestCase):
             agent_id="AgentId123",
             plat="windows",
             operating_system="Windows 11 Pro",
-            mesh_node_id="node//AgentNode",
+            # Tactical RMM stores agents' MeshCentral ids as hex.
+            mesh_node_id=AGENT_HEX,
             site__name="HQ",
             site__client__name="Acme",
         )
@@ -139,7 +146,7 @@ class AgentViewerTests(TestCase):
         with patch("support.mesh.desktop_relay", return_value=RELAY) as relay:
             response = self.client.post(f"{self.url}relay/")
         self.assertEqual(response.json(), {"relay": RELAY})
-        self.assertEqual(relay.call_args.args[0], "node//AgentNode")
+        self.assertEqual(relay.call_args.args[0], AGENT_NODE)
         # Tactical RMM's sync already gives technicians rights to their agents.
         self.assertEqual(relay.call_args.kwargs, {"grant": False})
         self.assertTrue(
@@ -175,6 +182,12 @@ class AgentViewerTests(TestCase):
 
 @override_settings(**TEST_SETTINGS)
 class DesktopRelayTests(TestCase):
+    def test_agent_ids_are_turned_into_meshcentrals_own_form(self):
+        self.assertEqual(mesh.node_id(AGENT_HEX), AGENT_NODE)
+        self.assertEqual(mesh.node_id(AGENT_HEX.lower()), AGENT_NODE)
+        self.assertEqual(mesh.node_id(AGENT_NODE), AGENT_NODE)
+        self.assertEqual(mesh.node_id(""), "")
+
     def test_the_relay_address_joins_the_tunnel_as_the_technician(self):
         user = baker.make(User, username="dana")
         users = {"action": "users", "users": [{"_id": user.mesh_user_id}]}
