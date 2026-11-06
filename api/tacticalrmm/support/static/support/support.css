@@ -190,7 +190,7 @@
 /* Their screen, beside the facts. Clicking it joins. Pictures sit on black, like any media. */
 .sp-overview { display: grid; gap: 16px; align-items: start; }
 .sp-screen-card { overflow: hidden; }
-.sp-screen { position: relative; display: block; width: 100%; aspect-ratio: 16 / 10; margin: 0; padding: 0; overflow: hidden; border: 0; background: #0b0d10; cursor: pointer; }
+.sp-screen { position: relative; display: block; color: inherit; text-decoration: none !important; width: 100%; aspect-ratio: 16 / 10; margin: 0; padding: 0; overflow: hidden; border: 0; background: #0b0d10; cursor: pointer; }
 .sp-screen img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .sp-screen:focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--sh-focus); }
 .sp-screen-join { position: absolute; right: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; background: rgb(11 13 16 / .78); color: #ffffff; font-size: var(--sh-text-sm); font-weight: 550; opacity: 0; transition: opacity var(--sh-fast) var(--sh-ease); }

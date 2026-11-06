@@ -467,6 +467,15 @@
       return;
     }
 
+    // Remote control opens in its own window, like a desktop app.
+    const app = target.closest("a[data-window]");
+    if (app && plain) {
+      const width = Math.min(1600, screen.availWidth), height = Math.min(960, screen.availHeight);
+      const opened = window.open(app.href, app.dataset.window, `popup,width=${width},height=${height}`);
+      if (opened) { event.preventDefault(); opened.focus(); }
+      return;
+    }
+
     const opener = target.closest("[data-open]");
     if (opener && plain) {
       const modal = document.getElementById(opener.dataset.open);

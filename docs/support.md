@@ -35,7 +35,7 @@ The console is laid out like a remote support host console: session groups on th
 
 Open a computer's session to:
 
-- **Join.** **Join**, **Terminal** and **Files** open MeshCentral in a new tab, already signed in, the same way the dashboard's Take Control does. With MeshCentral sync on (Tactical RMM's default), you sign in as your own MeshCentral account, and the console first gives that account rights to this one computer. A brand-new technician may need to wait a few minutes for sync to create their account. With sync off, the server's MeshCentral account is used, as in the dashboard. Each join is recorded in the audit log. The Windows support app runs in the person's own session, so it can't show the lock screen or a Windows permission prompt. On a Mac, the screen stays black until they allow Screen Recording for the support app.
+- **Join.** **Join** opens the remote control window (below) in its own window. **Terminal** and **Files** open MeshCentral in a new tab, already signed in, the same way the dashboard's Take Control does. With MeshCentral sync on (Tactical RMM's default), you sign in as your own MeshCentral account, and the console first gives that account rights to this one computer. A brand-new technician may need to wait a few minutes for sync to create their account. With sync off, the server's MeshCentral account is used, as in the dashboard. Each join is recorded in the audit log. The Windows support app runs in the person's own session, so it can't show the lock screen or a Windows permission prompt. On a Mac, the screen stays black until they allow Screen Recording for the support app.
 - **Run commands** on the **Commands** tab. It's a console that keeps the session's history: every command, who ran it, and what it printed, shared by everyone helping that computer. Choose PowerShell or Command Prompt on Windows, or the shell on a Mac. Pick a saved command from the toolbox, or press Ctrl+Enter to run what you typed. This needs the **Send command** role permission (`can_send_cmd`). On Windows, commands run as the person who opened the support app, without administrator rights. On a Mac, they run as root. The support app runs one command at a time, so a command that takes longer than 60 seconds shows "No reply" and keeps running. Every command is recorded in the audit log.
 - **Move to monitoring** on the **Monitoring** tab. Choose a client site and Workstation or Server, then **Install RMM agent**. The tab warns you if an agent with the same name is already monitored in a site you can see.
   - On Windows, the support app saves the server's PowerShell installer to the person's private temp folder and asks Windows to run it as an administrator. They see a Windows prompt and must choose Yes, and an administrator password may be needed. You won't see that prompt when you join. The console waits 20 seconds for their answer. If they choose No, it says so and nothing is tracked. The install token never appears in a command line or in the install log.
@@ -47,6 +47,24 @@ Open a computer's session to:
 - **End session.** Use this once the computer is monitored, or when you're done helping. The Mac service uninstalls itself. On Windows, the server stops the run-only support app and runs its uninstaller. Then the computer is removed from the support group, so it can't reconnect. A computer that's offline is only taken off the list. If the person opens the support app again, it comes back.
 
 Installing the agent uses the same installer account and two-hour install token as the dashboard's installer. It's unavailable while `TRMM_INSECURE` is on. All MeshCentral traffic goes through the server's existing MeshCentral connection, and session actions only reach computers in the support group. Don't send the Mac support app to a Mac that already has the RMM agent: both use MeshCentral's standard Mac service. Use Take Control in the dashboard instead.
+
+## Remote control window
+
+**Join** in the console, and the dashboard's **Take Control** once `take-control.sh` has been run, open the same remote control window. It's laid out like ScreenConnect's: a toolbar across the top, their screen in the middle, and the connection details along the bottom.
+
+- **Ctrl+Alt+Del** and **Keys**. Keys sends Windows, Alt+Tab, Esc, Ctrl+Shift+Esc (Task Manager), Windows+R, Windows+L and Print Screen. **Type text** types what you enter as keystrokes, which works in password fields. **Type my clipboard** does the same with your clipboard. Windows-only keys are hidden for Macs.
+- **Block input** stops them using their mouse and keyboard while you work. It's Windows only.
+- **Display** picks which of their displays to show, or all of them, when they have more than one.
+- **Zoom**: **Fit to window**, or 50% to 200%. The minus and plus buttons step between levels. When you're zoomed in, scroll to move around their screen.
+- **Quality**: **Best quality**, **Balanced** (the default) or **Fastest**, for slow connections. Zoom and quality are remembered in this browser.
+- **Full screen**, **Files** and **Terminal**. The arrow at the right hides the toolbar to give their screen the whole window.
+- **Disconnect** ends the session. **Reconnect** starts it again.
+
+Your mouse and keyboard go to their computer while the window is in front. The status bar shows their screen size, zoom, quality and the round-trip time.
+
+The window uses MeshCentral's own remote desktop: its desktop client (`static/support/vendor/meshcentral`, Apache-2.0, unchanged from MeshCentral 1.3.1) draws their screen. The server opens the desktop tunnel as the technician's own MeshCentral account (or the server's account with sync off), and the browser joins it on MeshCentral directly. That means MeshCentral's consent settings, session log and recording still apply, and the window shows "Waiting for them to allow it" when MeshCentral asks first. Opening it is recorded in the audit log like Take Control.
+
+For monitored agents, `take-control.sh` makes the dashboard's Take Control open this window. The dashboard opens Take Control at `https://<dashboard>/takecontrol/<agent id>`. The script adds an nginx redirect from there to `/support/control/agents/<agent id>/` on the API host, which needs **Use MeshCentral** and access to that agent, the same as Take Control. Run `./take-control.sh` in `/rmm` to turn it on, and `./take-control.sh --off` to go back to MeshCentral's page.
 
 ## Toolbox
 

@@ -7,12 +7,13 @@ computers in the regular Tactical RMM group.
 import asyncio
 import json
 import re
+import secrets
 import time
 from datetime import datetime, timezone
 
 import websockets
 from django.conf import settings
-from meshctrl.utils import get_login_token
+from meshctrl.utils import get_auth_token, get_login_token
 from websockets.exceptions import WebSocketException
 
 from core.utils import get_core_settings, get_mesh_ws_url
@@ -245,31 +246,33 @@ def remove_device(device):
     )
 
 
-def session_url(device, user, view):
-    """A one-time MeshCentral link that opens the remote desktop, terminal or files.
+def identity(user, node_id, grant=True):
+    """(core settings, the MeshCentral user a technician acts as) for one computer.
 
-    With MeshCentral sync on (Tactical RMM's default), technicians sign in to
-    MeshCentral as themselves, so they're given rights to this one support
-    computer first. Otherwise they use the server's account, as the dashboard does.
+    With MeshCentral sync on (Tactical RMM's default), technicians use their own
+    MeshCentral account. `grant` gives that account rights to this one computer
+    first, which support computers need; monitored agents get their rights from
+    Tactical RMM's sync. With sync off, the server's account is used, as in the
+    dashboard.
     """
     core = get_core_settings()
     if not core.mesh_site or not core.mesh_token:
         raise MeshError("MeshCentral isn’t set up in Tactical RMM’s settings yet.")
-    if core.sync_mesh_with_trmm:
-        mesh_user = user.mesh_user_id
-        reply = _request(
-            {"action": "users", "responseid": RESPONSE_ID}, _action("users")
+    if not core.sync_mesh_with_trmm:
+        return core, f"user//{core.mesh_api_superuser}"
+    mesh_user = user.mesh_user_id
+    reply = _request({"action": "users", "responseid": RESPONSE_ID}, _action("users"))
+    known = {u.get("_id") for u in (reply or {}).get("users", [])}
+    if mesh_user not in known:
+        raise MeshError(
+            "Your MeshCentral account isn’t ready yet. Tactical RMM creates it "
+            "within a few minutes of getting MeshCentral access. Try again soon."
         )
-        known = {u.get("_id") for u in (reply or {}).get("users", [])}
-        if mesh_user not in known:
-            raise MeshError(
-                "Your MeshCentral account isn’t ready yet. Tactical RMM creates it "
-                "within a few minutes of getting MeshCentral access. Try again soon."
-            )
+    if grant:
         reply = _request(
             {
                 "action": "adddeviceuser",
-                "nodeid": device["node_id"],
+                "nodeid": node_id,
                 "userids": [mesh_user],
                 "rights": DEVICE_RIGHTS,
                 "remove": False,
@@ -279,10 +282,77 @@ def session_url(device, user, view):
         )
         if reply is None or reply.get("result") not in ("ok", None):
             raise MeshError("MeshCentral didn’t give you access to this computer.")
-    else:
-        mesh_user = f"user//{core.mesh_api_superuser}"
+    return core, mesh_user
+
+
+def session_url(device, user, view, grant=True):
+    """A one-time MeshCentral link that opens the remote desktop, terminal or files."""
+    core, mesh_user = identity(user, device["node_id"], grant)
     token = get_login_token(key=core.mesh_token, user=mesh_user)
     return (
         f"{core.mesh_site.rstrip('/')}/?login={token}&gotonode={device['node_id']}"
         f"&viewmode={SESSION_VIEWS[view]}&hide=31"
+    )
+
+
+async def _open_desktop(control_url, node_id, tunnel):
+    """Ask the computer to open a desktop tunnel. Returns the relay cookie."""
+    async with websockets.connect(
+        control_url, max_size=TRMM_WS_MAX_SIZE, open_timeout=10
+    ) as control:
+        await control.send(json.dumps({"action": "authcookie"}))
+
+        async def cookies():
+            async for message in control:
+                reply = json.loads(message)
+                if reply.get("action") == "authcookie":
+                    return reply
+            return None
+
+        reply = await asyncio.wait_for(cookies(), 15)
+        if not reply or not reply.get("cookie"):
+            raise MeshError("MeshCentral didn’t open a remote desktop connection.")
+        await control.send(
+            json.dumps(
+                {
+                    "action": "msg",
+                    "type": "tunnel",
+                    "nodeid": node_id,
+                    "usage": 2,
+                    "value": f"*/meshrelay.ashx?p=2&nodeid={node_id}&id={tunnel}"
+                    f"&rauth={reply['rcookie']}",
+                }
+            )
+        )
+        return reply["cookie"]
+
+
+def desktop_relay(node_id, user, grant=True):
+    """The address a browser connects to for this computer's remote desktop.
+
+    The server asks the computer to open the tunnel as the technician's own
+    MeshCentral account; the browser then joins it directly on MeshCentral, so
+    MeshCentral's own consent settings and session log apply.
+    """
+    core, mesh_user = identity(user, node_id, grant)
+    base = get_mesh_ws_url().split("/control.ashx")[0]
+    control_url = (
+        f"{base}/control.ashx?auth={get_auth_token(mesh_user, core.mesh_token)}"
+    )
+    tunnel = secrets.token_hex(12)
+    try:
+        cookie = asyncio.run(_open_desktop(control_url, node_id, tunnel))
+    except MeshError:
+        raise
+    except asyncio.TimeoutError as exc:
+        raise MeshError("MeshCentral didn’t answer in time.") from exc
+    except (OSError, WebSocketException, ValueError, KeyError, TypeError) as exc:
+        raise MeshError(
+            "MeshCentral isn’t responding. Check that it’s running and that "
+            "Tactical RMM’s MeshCentral settings are right."
+        ) from exc
+    public = re.sub(r"^http", "ws", core.mesh_site.rstrip("/"))
+    return (
+        f"{public}/meshrelay.ashx?browser=1&p=2&nodeid={node_id}"
+        f"&id={tunnel}&auth={cookie}"
     )

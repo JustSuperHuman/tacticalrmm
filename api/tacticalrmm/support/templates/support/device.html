@@ -18,7 +18,8 @@
       {% csrf_token %}<input type="hidden" name="action" value="connect">
       <button class="sh-btn" type="submit" name="view" value="files" data-busy-label="Opening…" title="Browse and transfer their files in a new tab"{% if not device.online %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-folder"/></svg>Files</button>
       <button class="sh-btn" type="submit" name="view" value="terminal" data-busy-label="Opening…" title="Open a command line on their computer in a new tab"{% if not device.online %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-terminal"/></svg>Terminal</button>
-      <button class="sh-btn sh-btn--primary sp-join-btn" type="submit" name="view" value="desktop" data-busy-label="Joining…" title="See and control their screen in a new tab"{% if not device.online %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-monitor"/></svg>Join</button>
+      {% if device.online %}<a class="sh-btn sh-btn--primary sp-join-btn" href="{% url 'support:control' device.id %}" target="_blank" rel="noopener" data-window="control-{{ device.id }}" title="See and control their screen in its own window"><svg class="sp-icon" aria-hidden="true"><use href="#i-monitor"/></svg>Join</a>
+      {% else %}<button class="sh-btn sh-btn--primary sp-join-btn" type="button" disabled title="They’re offline"><svg class="sp-icon" aria-hidden="true"><use href="#i-monitor"/></svg>Join</button>{% endif %}
     </form>
   </header>
 
@@ -43,10 +44,14 @@
     <section class="sh-card sp-screen-card" aria-labelledby="screen-title">
       <header class="sh-card-head"><h2 id="screen-title">Their screen</h2><span class="sh-hint" id="screen-age"{% if not device.screen_at %} hidden{% endif %}>Updated <time datetime="{{ device.screen_time|date:'c' }}" data-ago>{{ device.screen_time|timesince }}</time> ago</span></header>
       {% if device.screen_at %}
-      <button class="sp-screen{% if not device.online %} is-offline{% endif %}" type="submit" form="join-form" name="view" value="desktop" data-no-busy title="{% if device.online %}Join to see and control their screen{% else %}Offline. This is the last picture of their screen.{% endif %}"{% if not device.online %} disabled{% endif %}>
+      {% if device.online %}<a class="sp-screen" href="{% url 'support:control' device.id %}" target="_blank" rel="noopener" data-window="control-{{ device.id }}" title="Join to see and control their screen">
         <img id="screen-preview" src="{{ detail_url }}screen/?v={{ device.screen_at }}" alt="The latest picture of {{ device.name }}’s screen">
-        {% if device.online %}<span class="sp-screen-join"><svg class="sp-icon" aria-hidden="true"><use href="#i-monitor"/></svg>Join</span>{% else %}<span class="sp-screen-join">Offline</span>{% endif %}
-      </button>
+        <span class="sp-screen-join"><svg class="sp-icon" aria-hidden="true"><use href="#i-monitor"/></svg>Join</span>
+      </a>
+      {% else %}<div class="sp-screen is-offline" title="Offline. This is the last picture of their screen.">
+        <img id="screen-preview" src="{{ detail_url }}screen/?v={{ device.screen_at }}" alt="The last picture of {{ device.name }}’s screen">
+        <span class="sp-screen-join">Offline</span>
+      </div>{% endif %}
       {% else %}
       <div class="sp-screen sp-screen--empty" id="screen-empty">
         {% if device.online %}<span class="sh-spinner" aria-hidden="true"></span><b>Getting a picture of their screen…</b><span>It shows up here in a few seconds. A locked screen or an open Windows prompt can’t be pictured.</span>

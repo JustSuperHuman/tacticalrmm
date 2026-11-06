@@ -26,6 +26,20 @@ A host workspace in the spirit of a remote support host console, on the JustUI a
 - **Screen pictures** refresh in place: the browser swaps a newer one in after it has loaded, with "Updated … ago" beside it. Offline pictures go grey.
 - **Toolbox and Settings** are plain pages in the same shell. Toolbox: add/edit on the left, Windows and Mac cards on the right. Settings: Support apps and Support group side by side, Screen previews (a switch), then Branding (logo with preview, company name, help phone, help email).
 
+## Remote control window
+
+A full-window viewer in the spirit of ScreenConnect's host window, always dark (`data-theme="dark"` on the kit). From top to bottom:
+
+- **Toolbar** (60px, surface): the session's identity on the left (a 32px system glyph, the name, then computer · system · user), centred tool groups, and the status on the right (a dot, Connected, a mono timer, a solid danger Disconnect, and a chevron that hides the toolbar).
+  - The tools are icon-over-label buttons (50px), in groups divided by hairlines: Essentials (Ctrl+Alt+Del, Keys menu, Block input), View (Display menu with monitor tiles, a zoom stepper around a zoom menu, Quality menu with descriptions, Full screen) and Tools (Files, Terminal).
+  - Menus are kit popovers, and the checked choice gets a soft accent tint.
+  - Below 1280px only icons show (zoom keeps its label).
+- **Their screen** sits on black, centred when it's smaller than the window and scrollable when it's larger.
+- **Overlay card** (spinner, title, line, actions) for each state: connecting, waiting for their consent, offline, disconnected and error.
+- **Status bar** (28px, mono numbers): screen size, display, zoom, quality, round-trip time, and a faint note that input goes to their computer.
+
+While not live, the tool groups dim. Windows-only tools hide for other systems. A hidden toolbar leaves a small tab at the top centre to bring it back.
+
 ## Rules
 
 - Colors come from `--sh-*` tokens only. The one literal is the white chip behind uploaded logos in dark mode.

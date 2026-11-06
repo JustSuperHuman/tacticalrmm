@@ -1,0 +1,152 @@
+{% extends 'support/base.html' %}
+{% load static %}
+{% block html_attrs %} data-theme="dark"{% endblock %}
+{% block title %}{{ title|default:'Remote control' }}{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="{% static 'support/control.css' %}">
+  <script src="{% static 'support/control.js' %}" defer></script>
+  <script src="{% static 'support/vendor/meshcentral/agent-desktop.js' %}" defer></script>
+{% endblock %}
+{% block body %}
+{{ data|json_script:"control-data" }}
+{% if signin or error %}
+<main id="main" class="cv-blocked">
+  <div class="cv-card">
+    {% if signin %}
+    <h1>Sign in to take control</h1>
+    <p>Sign in to the dashboard, then open remote control again.</p>
+    {% else %}
+    <h1>Remote control isn’t available</h1>
+    <p>{{ error }}</p>
+    {% endif %}
+  </div>
+</main>
+{% else %}
+<div class="cv" id="viewer" data-state="connecting" data-platform="{{ platform }}">
+  <header class="cv-bar" id="bar">
+    <div class="cv-who">
+      <span class="cv-glyph cv-glyph--{{ platform }}" aria-hidden="true"><svg class="sp-icon{% if platform != 'other' %} sp-icon--fill{% endif %}"><use href="#i-{% if platform == 'other' %}monitor{% else %}{{ platform }}{% endif %}"/></svg></span>
+      <div class="cv-who-text">
+        <b title="{{ title }}">{{ title }}</b>
+        <span>{% if title != computer %}{{ computer }} · {% endif %}{{ system|default:'Unknown system' }}{% if signed_in %} · {{ signed_in }}{% endif %}</span>
+      </div>
+    </div>
+
+    <div class="cv-tools" role="toolbar" aria-label="Remote control">
+      <div class="cv-group" aria-label="Essentials">
+        <button class="cv-tool" type="button" data-act="cad" data-windows title="Send Ctrl+Alt+Del to their computer"><svg class="sp-icon" aria-hidden="true"><use href="#i-shield"/></svg><span>Ctrl+Alt+Del</span></button>
+        <div class="cv-menu-wrap">
+          <button class="cv-tool" type="button" data-menu="keys" aria-haspopup="menu" aria-expanded="false" title="Send keys and text"><svg class="sp-icon" aria-hidden="true"><use href="#i-keyboard"/></svg><span>Keys</span></button>
+          <div class="sh-popover cv-menu" id="menu-keys" role="menu" hidden>
+            <p class="cv-menu-label">Send to their computer</p>
+            <button class="sh-menu-item" role="menuitem" type="button" data-keys="win" data-windows>Windows key</button>
+            <button class="sh-menu-item" role="menuitem" type="button" data-keys="alttab">Alt+Tab</button>
+            <button class="sh-menu-item" role="menuitem" type="button" data-keys="esc">Esc</button>
+            <button class="sh-menu-item" role="menuitem" type="button" data-keys="taskmgr" data-windows>Ctrl+Shift+Esc <small>Task Manager</small></button>
+            <button class="sh-menu-item" role="menuitem" type="button" data-keys="run" data-windows>Windows+R <small>Run</small></button>
+            <button class="sh-menu-item" role="menuitem" type="button" data-keys="lock" data-windows>Windows+L <small>Lock screen</small></button>
+            <button class="sh-menu-item" role="menuitem" type="button" data-keys="prtsc">Print Screen</button>
+            <hr class="cv-menu-sep">
+            <button class="sh-menu-item" role="menuitem" type="button" data-act="type"><svg class="sp-icon" aria-hidden="true"><use href="#i-type"/></svg>Type text…</button>
+            <button class="sh-menu-item" role="menuitem" type="button" data-act="clipboard"><svg class="sp-icon" aria-hidden="true"><use href="#i-clipboard"/></svg>Type my clipboard</button>
+          </div>
+        </div>
+        <button class="cv-tool" type="button" data-act="block" data-windows aria-pressed="false" title="Stop them using their mouse and keyboard while you work"><svg class="sp-icon" aria-hidden="true"><use href="#i-ban"/></svg><span>Block input</span></button>
+      </div>
+
+      <div class="cv-group" aria-label="View">
+        <div class="cv-menu-wrap">
+          <button class="cv-tool" type="button" data-menu="display" aria-haspopup="menu" aria-expanded="false" title="Choose which display to see"><svg class="sp-icon" aria-hidden="true"><use href="#i-displays"/></svg><span id="display-label">Display</span></button>
+          <div class="sh-popover cv-menu" id="menu-display" role="menu" hidden>
+            <p class="cv-menu-label">Their displays</p>
+            <div id="display-list" class="cv-displays"></div>
+          </div>
+        </div>
+        <div class="cv-zoom" role="group" aria-label="Zoom">
+          <button class="cv-step" type="button" data-zoom-step="-1" title="Zoom out" aria-label="Zoom out"><svg class="sp-icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+          <div class="cv-menu-wrap">
+            <button class="cv-tool cv-tool--zoom" type="button" data-menu="zoom" aria-haspopup="menu" aria-expanded="false" title="Choose a zoom level"><svg class="sp-icon" aria-hidden="true"><use href="#i-zoom"/></svg><span id="zoom-label">Fit</span></button>
+            <div class="sh-popover cv-menu" id="menu-zoom" role="menu" hidden>
+              <p class="cv-menu-label">Zoom</p>
+              <button class="sh-menu-item" role="menuitemradio" type="button" data-zoom="fit">Fit to window</button>
+              <button class="sh-menu-item" role="menuitemradio" type="button" data-zoom="50">50%</button>
+              <button class="sh-menu-item" role="menuitemradio" type="button" data-zoom="75">75%</button>
+              <button class="sh-menu-item" role="menuitemradio" type="button" data-zoom="100">100% <small>Actual size</small></button>
+              <button class="sh-menu-item" role="menuitemradio" type="button" data-zoom="125">125%</button>
+              <button class="sh-menu-item" role="menuitemradio" type="button" data-zoom="150">150%</button>
+              <button class="sh-menu-item" role="menuitemradio" type="button" data-zoom="200">200%</button>
+            </div>
+          </div>
+          <button class="cv-step" type="button" data-zoom-step="1" title="Zoom in" aria-label="Zoom in"><svg class="sp-icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+        </div>
+        <div class="cv-menu-wrap">
+          <button class="cv-tool" type="button" data-menu="quality" aria-haspopup="menu" aria-expanded="false" title="Trade picture quality for speed"><svg class="sp-icon" aria-hidden="true"><use href="#i-gauge"/></svg><span id="quality-label">Quality</span></button>
+          <div class="sh-popover cv-menu cv-menu--wide" id="menu-quality" role="menu" hidden>
+            <p class="cv-menu-label">Picture quality</p>
+            <button class="sh-menu-item cv-option" role="menuitemradio" type="button" data-quality="best"><b>Best quality</b><small>Sharpest picture. Uses the most bandwidth.</small></button>
+            <button class="sh-menu-item cv-option" role="menuitemradio" type="button" data-quality="balanced"><b>Balanced</b><small>A clear picture that keeps up with the mouse.</small></button>
+            <button class="sh-menu-item cv-option" role="menuitemradio" type="button" data-quality="fast"><b>Fastest</b><small>For slow connections. Softer picture.</small></button>
+          </div>
+        </div>
+        <button class="cv-tool" type="button" data-act="fullscreen" title="Use the whole screen"><svg class="sp-icon" aria-hidden="true"><use href="#i-maximize" id="fullscreen-icon"/></svg><span id="fullscreen-label">Full screen</span></button>
+      </div>
+
+      <div class="cv-group" aria-label="Tools">
+        <form method="post" action="{{ open_url }}" target="_blank" rel="noopener">
+          {% csrf_token %}{% if open_action %}<input type="hidden" name="action" value="{{ open_action }}">{% endif %}
+          <button class="cv-tool" type="submit" name="view" value="files" title="Browse and transfer their files in a new tab"><svg class="sp-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>Files</span></button>
+          <button class="cv-tool" type="submit" name="view" value="terminal" title="Open a command line on their computer in a new tab"><svg class="sp-icon" aria-hidden="true"><use href="#i-terminal"/></svg><span>Terminal</span></button>
+        </form>
+      </div>
+    </div>
+
+    <div class="cv-end">
+      <span class="cv-state" id="state-label" role="status"><span class="cv-dot" aria-hidden="true"></span><span id="state-text">Connecting</span><time id="timer" class="cv-timer"></time></span>
+      <button class="sh-btn sh-btn--danger-solid sh-btn--sm cv-disconnect" type="button" data-act="disconnect"><svg class="sp-icon" aria-hidden="true"><use href="#i-power"/></svg>Disconnect</button>
+      <button class="sh-btn sh-btn--ghost sh-btn--icon sh-btn--sm" type="button" data-act="hidebar" title="Hide the toolbar" aria-label="Hide the toolbar"><svg class="sp-icon" aria-hidden="true"><use href="#i-chevron-up"/></svg></button>
+    </div>
+  </header>
+  <button class="cv-showbar" type="button" data-act="showbar" title="Show the toolbar" aria-label="Show the toolbar"><svg class="sp-icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+
+  <main class="cv-stage" id="stage">
+    <canvas id="screen" width="16" height="10" tabindex="0" aria-label="Their screen. Mouse and keyboard go to their computer."></canvas>
+    <div class="cv-overlay" id="overlay">
+      <div class="cv-card" role="status" aria-live="polite">
+        <span class="sh-spinner cv-spinner" aria-hidden="true"></span>
+        <h1 id="overlay-title">Connecting to {{ computer }}…</h1>
+        <p id="overlay-text">This usually takes a few seconds.</p>
+        <div class="cv-card-actions">
+          <button class="sh-btn sh-btn--primary" type="button" data-act="reconnect" id="overlay-retry" hidden>Try again</button>
+          <button class="sh-btn" type="button" data-act="close" id="overlay-close" hidden>Close window</button>
+          <a class="sh-btn sh-btn--ghost" href="{{ back_url }}" id="overlay-back" hidden>Back to {{ back_label|lower }}</a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="cv-status" aria-label="Connection details">
+    <span id="st-size">—</span>
+    <span id="st-display"></span>
+    <span id="st-zoom"></span>
+    <span id="st-quality"></span>
+    <span id="st-latency"></span>
+    <span class="cv-status-note" id="st-note">Your mouse and keyboard control their computer while this window is in front.</span>
+  </footer>
+</div>
+
+<dialog class="sh-dialog cv-dialog" id="type-dialog" aria-labelledby="type-title">
+  <form method="dialog">
+    <header class="sh-dialog-head"><h2 id="type-title">Type text on their computer</h2></header>
+    <div class="sh-dialog-body">
+      <label class="sh-label" for="type-text">Text</label>
+      <textarea class="sh-textarea" id="type-text" rows="4" spellcheck="false" autocomplete="off"></textarea>
+      <p class="sh-hint">It’s typed into whatever has focus on their screen, one key at a time, so it works in password fields. Click where it should go first.</p>
+    </div>
+    <footer class="sh-dialog-foot">
+      <button class="sh-btn" value="cancel" type="submit">Cancel</button>
+      <button class="sh-btn sh-btn--primary" value="type" type="submit">Type it</button>
+    </footer>
+  </form>
+</dialog>
+{% endif %}
+{% endblock %}
