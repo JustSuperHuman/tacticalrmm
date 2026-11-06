@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-SCRIPT_VERSION="161"
+SCRIPT_VERSION="162"
 # This fork installs and updates from its own branch. Use amidaware/tacticalrmm and
 # master to follow upstream instead.
 TRMM_REPO='JustSuperHuman/tacticalrmm'
@@ -701,6 +701,10 @@ sudo tar -xzf /tmp/${webtar} -C /var/www/rmm
 echo "window._env_ = {PROD_URL: \"https://${API}\"}" | sudo tee /var/www/rmm/dist/env-config.js >/dev/null
 sudo chown www-data:www-data -R /var/www/rmm/dist
 rm -f /tmp/${webtar}
+
+# This fork's dashboard skin (see dashboard-skin/README.md). Remove this block
+# to serve the stock upstream look.
+bash /rmm/dashboard-skin/apply.sh /var/www/rmm/dist || echo "Dashboard skin was not applied"
 
 for i in nats nats-api rmm daphne celery celerybeat nginx; do
   printf >&2 "${GREEN}Starting ${i} service${NC}\n"

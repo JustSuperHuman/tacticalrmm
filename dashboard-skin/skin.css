@@ -1,0 +1,468 @@
+/* Dashboard skin for the Tactical RMM web app (amidaware/tacticalrmm-web).
+
+   The dashboard's Vue source lives upstream, not in this repo. apply.sh copies this folder
+   into the built dashboard (/var/www/rmm/dist/skin/) and links skin.css from index.html, so
+   the upstream frontend stays byte-for-byte stock and merges never conflict.
+
+   It restyles Quasar's own class names with the JustUI tokens (--sh-*) that the support
+   pages use. Quasar's class names are stable between releases. When upstream bumps
+   WEB_VERSION, check the sign-in page, the agent table, a menu and a dialog in light and
+   dark mode.
+
+   Rules are prefixed with `body` so they outrank Quasar's selectors and the route CSS that
+   loads after this file. !important appears only where Quasar's own utility classes use it. */
+
+@font-face{font-family:"Geist";src:url("fonts/Geist-Variable.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:"Geist Mono";src:url("fonts/GeistMono-Variable.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+
+/* ---------- tokens: JustUI, switched by Quasar's dark mode ---------- */
+:root,body.body--light{
+  --sh-font:"Geist",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --sh-mono:"Geist Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  --sh-ease:cubic-bezier(.2,.7,.2,1);--sh-fast:120ms;--sh-med:200ms;
+  --sh-bg:#f7f8fa;--sh-surface:#ffffff;--sh-surface-2:#f1f3f6;--sh-surface-3:#e9ecf1;--sh-overlay:rgba(11,13,16,.42);
+  --sh-ink:#0b0d10;--sh-ink-2:#363d47;--sh-muted:#68707d;--sh-faint:#9aa1ad;
+  --sh-line:#e4e7ec;--sh-line-strong:#d2d7df;
+  --sh-accent:#2f5bff;--sh-accent-hover:#2349e6;--sh-accent-ink:#ffffff;--sh-accent-soft:#e9eeff;--sh-accent-text:#2547d9;
+  --sh-focus:0 0 0 3px rgba(47,91,255,.32);
+  --sh-ok:#138a4a;--sh-ok-soft:#e5f5ec;--sh-warn:#a66700;--sh-warn-soft:#fdf2dc;--sh-danger:#cc2f27;--sh-danger-soft:#fdeceb;--sh-info:#2547d9;--sh-info-soft:#e9eeff;
+  --sh-shadow-sm:0 1px 2px rgba(11,13,16,.06);
+  --sh-shadow:0 1px 2px rgba(11,13,16,.05),0 4px 14px rgba(11,13,16,.06);
+  --sh-shadow-lg:0 2px 6px rgba(11,13,16,.06),0 18px 48px rgba(11,13,16,.16);
+  /* skin-only: status fills that carry white text, and status icons on an ink toast */
+  --skin-ok-fill:#138a4a;--skin-danger-fill:#cc2f27;--skin-info-fill:#2f5bff;--skin-warn-fill:#f0b03c;
+  --skin-toast-ok:#3ccf7e;--skin-toast-warn:#f0b03c;--skin-toast-info:#8fa4ff;
+  --skin-thumb-ink:#363d47;
+  color-scheme:light;
+}
+body.body--dark{
+  --sh-bg:#0b0d10;--sh-surface:#121419;--sh-surface-2:#0f1114;--sh-surface-3:#1a1d23;--sh-overlay:rgba(0,0,0,.6);
+  --sh-ink:#eef0f4;--sh-ink-2:#c5cad3;--sh-muted:#8b93a1;--sh-faint:#5c6370;
+  --sh-line:#22262d;--sh-line-strong:#2f343c;
+  --sh-accent:#4d72ff;--sh-accent-hover:#6a89ff;--sh-accent-ink:#ffffff;--sh-accent-soft:#18204a;--sh-accent-text:#8fa4ff;
+  --sh-focus:0 0 0 3px rgba(91,124,255,.45);
+  --sh-ok:#3ccf7e;--sh-ok-soft:#0f2a1b;--sh-warn:#f0b03c;--sh-warn-soft:#2e2209;--sh-danger:#ff6b63;--sh-danger-soft:#33130f;--sh-info:#8fa4ff;--sh-info-soft:#18204a;
+  --sh-shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --sh-shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);
+  --sh-shadow-lg:0 2px 6px rgba(0,0,0,.4),0 24px 60px rgba(0,0,0,.55);
+  --skin-toast-ok:#138a4a;--skin-toast-warn:#a66700;--skin-toast-info:#2547d9;
+  color-scheme:dark;
+}
+
+/* Quasar reads its palette from these, so every color="primary", text-negative and
+   q-*--dark surface follows the tokens without touching a component. */
+body{
+  --q-primary:var(--sh-accent);--q-secondary:var(--sh-accent);--q-accent:var(--sh-accent);
+  --q-positive:var(--sh-ok);--q-negative:var(--sh-danger);--q-info:var(--sh-info);--q-warning:var(--sh-warn);
+  --q-dark:var(--sh-surface);--q-dark-page:var(--sh-bg);
+}
+
+/* ---------- base ---------- */
+body,body.body--dark,body.body--light{
+  font-family:var(--sh-font);font-size:14px;line-height:1.5;letter-spacing:0;
+  color:var(--sh-ink);background:var(--sh-bg);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-synthesis:none;
+}
+body ::selection{background:var(--sh-accent-soft);color:var(--sh-ink)}
+body a:not(.q-link):not(.q-btn):not(.q-item):not(.q-tab):not(.jc-tab){color:var(--sh-accent-text);text-decoration:none}
+body a:not(.q-link):not(.q-btn):not(.q-item):not(.q-tab):not(.jc-tab):hover{text-decoration:underline;text-underline-offset:2px}
+body code,body kbd,body pre,body samp{font-family:var(--sh-mono)}
+
+body .text-h4{font-size:24px;font-weight:650;letter-spacing:-.02em;line-height:1.2}
+body .text-h5{font-size:20px;font-weight:650;letter-spacing:-.015em;line-height:1.25}
+body .text-h6{font-size:16px;font-weight:600;letter-spacing:-.01em;line-height:1.35}
+body .text-subtitle1{font-size:14px;font-weight:500;letter-spacing:0}
+body .text-subtitle2{font-size:13px;font-weight:550;letter-spacing:0}
+body .text-body1{font-size:14px;letter-spacing:0}
+body .text-body2{font-size:13px;letter-spacing:0}
+body .text-caption{font-size:12px;letter-spacing:0;line-height:1.45}
+body .text-overline{font-family:var(--sh-mono);font-size:10.5px;font-weight:500;letter-spacing:.08em}
+body .text-weight-bold{font-weight:600}
+
+/* Quasar's named colors that the dashboard hard-codes, pulled onto the palette */
+body .text-grey,body .text-faded{color:var(--sh-muted)!important}
+body .text-green{color:var(--sh-ok)!important}
+body .text-red{color:var(--sh-danger)!important}
+body .text-orange{color:var(--sh-warn)!important}
+body .bg-positive{background:var(--skin-ok-fill)!important}
+body .bg-negative{background:var(--skin-danger-fill)!important}
+body .bg-info{background:var(--skin-info-fill)!important}
+body .bg-warning{background:var(--skin-warn-fill)!important}
+
+/* scrollbars */
+body *{scrollbar-width:thin;scrollbar-color:var(--sh-line-strong) transparent}
+body *:hover{scrollbar-color:var(--sh-faint) transparent}
+
+/* Material ripples date the whole app; hovers and presses carry the feedback instead */
+body .q-ripple{display:none!important}
+/* the loading bar color is a user preference; only upstream's default red is swapped */
+body .q-loading-bar.bg-red{background:var(--sh-accent)!important}
+body .q-loading-bar--top{height:2px!important}
+
+/* ---------- buttons ---------- */
+body .q-btn{text-transform:none;letter-spacing:0;font-weight:500;transition:background-color var(--sh-fast),color var(--sh-fast),box-shadow var(--sh-fast),transform var(--sh-fast)}
+body .q-btn--actionable:active:not(.disabled){transform:translateY(.5px)}
+body .q-btn--rectangle{border-radius:8px}
+body .q-btn--standard:before,body .q-btn--actionable.q-btn--standard:active:before,body .q-btn--actionable.q-btn--standard.q-btn--active:before{box-shadow:var(--sh-shadow-sm)}
+body .q-btn--outline:before{border-color:color-mix(in srgb,currentColor 38%,transparent)}
+body .q-btn .q-focus-helper{border-radius:inherit}
+body .q-hoverable:hover>.q-focus-helper{opacity:.08}
+body .q-btn--unelevated.bg-primary:hover,body .q-btn--standard.bg-primary:hover{background:var(--sh-accent-hover)!important}
+body .q-btn-group{border-radius:8px}
+body .q-btn-dropdown__arrow{font-size:18px;opacity:.6}
+
+/* ---------- fields ---------- */
+body .q-field{font-size:14px}
+body .q-field__label{color:var(--sh-muted);letter-spacing:0}
+body .q-field__native,body .q-field__input,body .q-field__prefix,body .q-field__suffix{color:var(--sh-ink)}
+body .q-field__native::placeholder,body .q-field__input::placeholder{color:var(--sh-faint)}
+body .q-field__marginal{color:var(--sh-muted)}
+body .q-field__bottom{font-size:12px;color:var(--sh-muted)}
+body .q-field--error .q-field__bottom{color:var(--sh-danger)}
+
+body .q-field--outlined .q-field__control{border-radius:8px;background:var(--sh-surface);transition:box-shadow var(--sh-fast)}
+body .q-field--outlined .q-field__control:before{border:1px solid var(--sh-line-strong);transition:border-color var(--sh-fast)}
+body .q-field--outlined:hover .q-field__control:before{border-color:color-mix(in srgb,var(--sh-ink) 22%,var(--sh-line-strong))}
+body .q-field--outlined .q-field__control:after{border-width:1px}
+body .q-field--outlined.q-field--highlighted .q-field__control{box-shadow:var(--sh-focus)}
+body .q-field--outlined.q-field--highlighted .q-field__control:after{border-width:1px;border-color:var(--sh-accent)}
+
+body .q-field--filled .q-field__control{border-radius:8px;background:var(--sh-surface);box-shadow:inset 0 0 0 1px var(--sh-line-strong);transition:box-shadow var(--sh-fast)}
+body .q-field--filled .q-field__control:before{background:transparent;border:0}
+body .q-field--filled:hover .q-field__control{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sh-ink) 22%,var(--sh-line-strong))}
+body .q-field--filled .q-field__control:after{inset:0;height:auto;border-radius:inherit;background:transparent;border:1px solid var(--sh-accent);transform:none;opacity:0;transition:opacity var(--sh-fast)}
+body .q-field--filled.q-field--highlighted .q-field__control{box-shadow:inset 0 0 0 1px var(--sh-accent),var(--sh-focus)}
+body .q-field--filled.q-field--highlighted .q-field__control:after{opacity:1;transform:none}
+
+body .q-field--standard .q-field__control:before{border-bottom-color:var(--sh-line-strong)}
+body .q-field--standard:hover .q-field__control:before{border-bottom-color:color-mix(in srgb,var(--sh-ink) 30%,var(--sh-line-strong))}
+body .q-field--standard .q-field__control:after{height:1.5px;background:var(--sh-accent)}
+
+body .q-field--error .q-field__control:after,body .q-field--error.q-field--highlighted .q-field__control:after{border-color:var(--sh-danger)}
+body .q-field--error .q-field__control:before{border-color:color-mix(in srgb,var(--sh-danger) 55%,var(--sh-line-strong))}
+body .q-field--disabled .q-field__control{opacity:.6}
+
+/* ---------- checkbox, radio, toggle ---------- */
+body .q-checkbox__inner,body .q-radio__inner{color:var(--sh-faint)}
+body .q-checkbox__inner--truthy,body .q-checkbox__inner--indet,body .q-radio__inner--truthy{color:var(--sh-accent)}
+body .q-checkbox__bg{border-width:1.5px;border-radius:5px}
+body .q-checkbox__label,body .q-radio__label,body .q-toggle__label{font-size:14px;color:var(--sh-ink)}
+
+body .q-toggle__inner{color:var(--sh-line-strong)}
+body .q-toggle__inner--truthy{color:var(--sh-accent)}
+body .q-toggle__track,body .q-toggle__inner--truthy .q-toggle__track{opacity:1;background:currentColor}
+body .q-toggle__thumb:after,body .q-toggle__inner--truthy .q-toggle__thumb:after{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.28),0 1px 1px rgba(0,0,0,.08)}
+body .q-toggle__thumb:before{display:none}
+body .q-toggle__thumb .q-icon{color:var(--skin-thumb-ink);opacity:.8}
+body .q-toggle__inner--truthy .q-toggle__thumb .q-icon{color:var(--sh-accent);opacity:1}
+body .q-toggle:not(.q-toggle--dense) .q-toggle__inner{padding:.22em .25em}
+body .q-toggle:not(.q-toggle--dense) .q-toggle__track{height:.56em;border-radius:.28em}
+body .q-toggle:not(.q-toggle--dense) .q-toggle__thumb{top:.28em;left:.31em;width:.44em;height:.44em}
+body .q-toggle:not(.q-toggle--dense) .q-toggle__inner--truthy .q-toggle__thumb{left:.65em}
+
+/* ---------- cards and dialogs ---------- */
+body .q-card,body .q-card--dark{border-radius:12px;background:var(--sh-surface);color:var(--sh-ink);box-shadow:0 0 0 1px var(--sh-line),var(--sh-shadow-sm)}
+body .q-card--flat,body .q-card--dark.q-card--flat{box-shadow:none}
+body .q-card--bordered,body .q-card--dark.q-card--bordered{border:1px solid var(--sh-line);box-shadow:none}
+body .q-card__actions .q-btn--rectangle{padding:0 14px;min-height:34px}
+
+body .q-dialog__backdrop{background:var(--sh-overlay);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+body .q-dialog__inner>.q-card,body .q-dialog__inner>div>.q-card:only-child{border-radius:16px;border:0;box-shadow:0 0 0 1px var(--sh-line),var(--sh-shadow-lg);overflow:hidden}
+body .q-dialog__inner--maximized>.q-card,body .q-dialog__inner--maximized>div{border-radius:0}
+body .q-dialog .q-card__section--vert{padding:16px 20px}
+body .q-dialog .q-card__actions{padding:12px 20px 16px;gap:8px}
+body .q-dialog .q-card__actions .q-btn+.q-btn{margin-left:0}
+
+/* the title bar most dashboard dialogs open with */
+body .q-dialog .q-bar,body .q-dialog .q-bar--dark,body .q-dialog .q-bar--standard{height:52px;padding:0 10px 0 20px;background:transparent;color:var(--sh-ink);font-size:15px;font-weight:600;letter-spacing:-.01em;border-bottom:1px solid var(--sh-line)}
+body .q-dialog .q-bar .q-btn{color:var(--sh-muted);border-radius:8px;min-width:32px;min-height:32px}
+body .q-dialog .q-bar .q-btn:hover{color:var(--sh-ink);background:var(--sh-surface-3)}
+
+/* ---------- menus, lists, tooltips ---------- */
+body .q-menu,body .q-menu--dark{background:var(--sh-surface);color:var(--sh-ink);border-radius:12px;box-shadow:0 0 0 1px var(--sh-line),var(--sh-shadow-lg);padding:4px}
+body .q-menu .q-item{min-height:32px;padding:6px 10px;border-radius:6px;font-size:13px;font-weight:450;color:var(--sh-ink-2)}
+body .q-menu .q-item--dense{min-height:30px;padding:4px 10px}
+body .q-menu .q-item .q-focus-helper{display:none}
+body .q-menu .q-item.q-item--clickable:hover,body .q-menu .q-item.q-manual-focusable--focused{background:var(--sh-surface-3);color:var(--sh-ink)}
+body .q-menu .q-item--active,body .q-menu .q-item.q-router-link--active{background:var(--sh-accent-soft);color:var(--sh-accent-text)}
+body .q-menu .q-item__section--side{color:var(--sh-muted);padding-right:10px;min-width:0}
+body .q-menu .q-item__section--side>.q-icon{font-size:17px}
+body .q-menu .q-item__section--avatar{min-width:28px}
+body .q-menu .q-separator{margin:4px 6px;background:var(--sh-line)}
+
+body .q-item__label--header{font-family:var(--sh-mono);font-size:10.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--sh-faint);padding:10px 10px 6px}
+body .q-item__label--caption{color:var(--sh-muted);font-size:12px;letter-spacing:0}
+body .q-item__label--overline{font-family:var(--sh-mono);font-size:10.5px;letter-spacing:.06em;color:var(--sh-muted)}
+body .q-list--bordered{border-color:var(--sh-line)}
+body .q-list--separator>.q-item-type+.q-item-type,body .q-list--separator>.q-virtual-scroll__content>.q-item-type+.q-item-type{border-top-color:var(--sh-line)}
+body .q-separator,body .q-separator--dark{background:var(--sh-line)}
+body .q-expansion-item--expanded+.q-expansion-item--expanded>div>.q-item{border-top:0}
+
+body .q-tooltip{background:var(--sh-ink);color:var(--sh-bg);font:500 12px/1.45 var(--sh-font);letter-spacing:0;padding:5px 9px;border-radius:6px;box-shadow:var(--sh-shadow-lg)}
+
+body .q-badge{border-radius:999px;font:600 11px/1 var(--sh-font);letter-spacing:0;padding:3px 6px;min-height:18px}
+body .q-badge--floating{top:-1px;right:-5px}
+body .q-chip,body .q-chip--dark{border-radius:999px;font-size:12.5px;font-weight:500;background:var(--sh-surface-3);color:var(--sh-ink-2)}
+
+body .q-banner{font-size:13px}
+body .q-linear-progress{border-radius:999px}
+
+/* toasts: an ink pill like the support console, red when something failed */
+body .q-notifications .q-notification.q-notification{background:var(--sh-ink)!important;color:var(--sh-bg)!important;border-radius:12px;box-shadow:var(--sh-shadow-lg);font-size:13px;font-weight:500;padding:6px 6px 6px 14px;min-height:44px}
+body .q-notifications .q-notification.q-notification.bg-negative{background:var(--skin-danger-fill)!important;color:#fff!important}
+body .q-notification__icon{font-size:19px}
+body .q-notification.bg-positive .q-notification__icon{color:var(--skin-toast-ok)}
+body .q-notification.bg-warning .q-notification__icon{color:var(--skin-toast-warn)}
+body .q-notification.bg-info .q-notification__icon{color:var(--skin-toast-info)}
+body .q-notifications .q-notification .q-btn{color:inherit!important;opacity:.7;border-radius:8px}
+body .q-notifications .q-notification .q-btn:hover{opacity:1}
+
+/* ---------- tables ---------- */
+body .q-table__card,body .q-table__card.q-table--dark{background:var(--sh-surface);color:var(--sh-ink);border-radius:12px;box-shadow:0 0 0 1px var(--sh-line)}
+body .q-table__card.q-table--flat,body .q-table--flat{box-shadow:none}
+body .q-table thead,body .q-table tr,body .q-table th,body .q-table td,body .q-table--dark thead,body .q-table--dark tr,body .q-table--dark th,body .q-table--dark td{border-color:var(--sh-line)}
+body .q-table th{font-size:12px;font-weight:500;color:var(--sh-muted);letter-spacing:0;white-space:nowrap}
+body .q-table th .q-icon{color:var(--sh-muted)}
+body .q-table th.sortable:hover,body .q-table th.sorted{color:var(--sh-ink)}
+body .q-table tbody td{font-size:13px}
+body .q-table tbody tr:not(.q-tr--no-hover):hover>td:not(.q-td--no-hover):before{background:color-mix(in srgb,var(--sh-ink) 4%,transparent)}
+body .q-table__top{padding:10px 14px}
+body .q-table__bottom{min-height:38px;padding:4px 14px;font-size:12px;color:var(--sh-muted);border-top-color:var(--sh-line)}
+body .q-table__bottom .q-field__native,body .q-table__bottom .q-field__control{font-size:12px}
+body .q-table__linear-progress{height:2px}
+
+/* sticky header fills that the dashboard hard-codes */
+body .table-bgcolor .q-table__top,body .table-bgcolor .q-table__bottom,body .table-bgcolor thead tr:first-child th,
+body .table-bgcolor-dark .q-table__top,body .table-bgcolor-dark .q-table__bottom,body .table-bgcolor-dark thead tr:first-child th{background-color:var(--sh-surface)}
+
+/* selected row */
+body .q-table tbody tr.highlight,body .q-table tbody tr.highlight-dark{background:var(--sh-accent-soft)}
+body .q-table tbody tr.highlight>td,body .q-table tbody tr.highlight-dark>td{color:var(--sh-ink)}
+
+/* ---------- tabs ---------- */
+body .q-tab{text-transform:none;letter-spacing:0}
+body .q-tab--inactive{opacity:1}
+body .q-tab__label{font-size:13px;font-weight:500;line-height:1.2}
+body .q-tab .q-focus-helper{display:none}
+body .q-tab:hover{color:var(--sh-ink)}
+body .q-tabs .q-tab__indicator{height:2px;border-radius:2px}
+
+/* ---------- panels and splitters ---------- */
+body .q-tab-panels,body .q-tab-panels--dark{background:transparent}
+body .q-splitter__separator,body .q-splitter--dark>.q-splitter__separator{background:var(--sh-line)!important}
+body .q-splitter__separator:hover{background:var(--sh-accent)!important}
+/* the drag handle upstream draws as a blue avatar */
+body .q-splitter__separator-area .q-avatar{width:34px;height:14px;font-size:14px;border-radius:999px;background:var(--sh-surface-3)!important;color:var(--sh-muted)!important;box-shadow:0 0 0 1px var(--sh-line-strong)}
+body .q-splitter--horizontal .q-splitter__separator-area .q-avatar .q-icon{transform:rotate(90deg)}
+body .q-splitter__separator-area .q-avatar .q-icon{font-size:13px}
+body .q-splitter__separator:hover .q-avatar{color:var(--sh-ink)!important;box-shadow:0 0 0 1px var(--sh-accent)}
+
+/* ============================================================
+   Main layout: header bar
+   ============================================================ */
+body .q-header,body .q-header.bg-dark,body .q-header.bg-light,body .q-header.bg-grey-9{
+  background:color-mix(in srgb,var(--sh-bg) 86%,transparent)!important;color:var(--sh-ink)!important;
+  border-bottom:1px solid var(--sh-line);-webkit-backdrop-filter:saturate(1.4) blur(10px);backdrop-filter:saturate(1.4) blur(10px);
+}
+body .q-header .q-layout__shadow{display:none}
+
+body .q-header.bg-grey-9 .q-toolbar{min-height:50px;padding:0 10px 0 8px;gap:2px}
+body .q-header.bg-grey-9 .q-toolbar__title{display:flex;align-items:center;gap:9px;padding:0 8px;min-width:0;font-size:15px;font-weight:650;letter-spacing:-.015em;color:var(--sh-ink)}
+body .q-header.bg-grey-9 .q-toolbar__title::before{content:"";flex:none;width:22px;height:22px;background:url("mark.webp") center/contain no-repeat}
+/* support-site.sh's access.js brings the JustConnect wordmark; then this mark steps aside */
+body .q-header.bg-grey-9 .q-toolbar__title:has(.jc-brand)::before{display:none}
+body .q-header.bg-grey-9 .q-toolbar__title>.text-overline{margin-left:0!important;padding:3px 7px;border-radius:999px;background:var(--sh-surface-3);color:var(--sh-muted);font:500 11px/1 var(--sh-mono);letter-spacing:0;text-transform:none}
+body .q-header.bg-grey-9 .q-toolbar__title .q-chip{height:24px;margin:0;font:500 11.5px/1 var(--sh-font);letter-spacing:0;text-transform:none;color:var(--sh-ink)}
+body .q-header.bg-grey-9 .q-toolbar__title .q-chip a{color:inherit}
+
+body .q-header.bg-grey-9 .q-toolbar>.q-btn:not(.q-btn-dropdown){min-width:32px;min-height:32px;padding:0 6px;border-radius:8px;color:var(--sh-ink-2)}
+body .q-header.bg-grey-9 .q-toolbar>.q-btn:not(.q-btn-dropdown):hover{background:var(--sh-surface-3);color:var(--sh-ink)}
+body .q-header.bg-grey-9 .q-toolbar>.q-btn .q-focus-helper{display:none}
+body .q-header.bg-grey-9 .q-toolbar>.q-btn .q-icon{font-size:19px}
+body .q-header.bg-grey-9 .q-toolbar>.q-btn[style*="font-size"] .block{font-family:var(--sh-mono);font-size:13px;font-weight:600}
+
+/* agent count */
+body .q-header.bg-grey-9 .q-toolbar>.q-chip{height:30px;margin:0 4px;padding:0 11px 0 4px;background:var(--sh-surface-3);color:var(--sh-ink);font:600 13px/1 var(--sh-font);font-variant-numeric:tabular-nums;box-shadow:none}
+body .q-header.bg-grey-9 .q-toolbar>.q-chip:hover{background:color-mix(in srgb,var(--sh-ink) 10%,var(--sh-surface-3))}
+body .q-header.bg-grey-9 .q-toolbar>.q-chip .q-avatar{width:22px;height:22px;font-size:22px;margin:0 7px 0 0;border-radius:999px}
+body .q-header.bg-grey-9 .q-toolbar>.q-chip .q-avatar.bg-primary{background:color-mix(in srgb,var(--sh-accent) 16%,transparent)!important;color:var(--sh-accent-text)!important}
+body .q-header.bg-grey-9 .q-toolbar>.q-chip .q-avatar .q-icon{font-size:14px}
+
+/* account menu: an avatar in front of the name */
+body .q-header.bg-grey-9 .q-btn-dropdown{align-self:center;height:34px;min-height:34px;margin-left:6px;padding:0 6px 0 3px;border-radius:999px;font-size:13px;font-weight:500;color:var(--sh-ink)}
+body .q-header.bg-grey-9 .q-btn-dropdown:hover{background:var(--sh-surface-3)}
+body .q-header.bg-grey-9 .q-btn-dropdown .q-focus-helper{display:none}
+body .q-header.bg-grey-9 .q-btn-dropdown .q-btn__content::before{content:"person";display:grid;place-items:center;width:28px;height:28px;margin-right:8px;border-radius:999px;background:var(--sh-surface-3);color:var(--sh-ink-2);font:normal 17px/1 "Material Icons";-webkit-font-feature-settings:"liga";font-feature-settings:"liga";box-shadow:0 0 0 1px var(--sh-line)}
+body .q-header.bg-grey-9 .q-btn-dropdown:hover .q-btn__content::before{background:var(--sh-surface)}
+
+/* the dark mode switch */
+body .q-header.bg-grey-9 .q-toggle{margin-right:2px!important}
+body .q-header.bg-grey-9 .q-toggle__inner{font-size:34px}
+
+/* ============================================================
+   Dashboard: menu bar, client tree, agent table, detail tabs
+   ============================================================ */
+body .q-page>.q-pb-sm:has(>.q-bar){padding-bottom:0!important}
+body .q-page>div>.q-bar,body .q-page>div>.q-bar--dark,body .q-page>div>.q-bar--standard{height:40px;padding:0 8px;background:var(--sh-bg);border-bottom:1px solid var(--sh-line)}
+body .q-page>div>.q-bar .q-btn-group{box-shadow:none;gap:2px}
+body .q-page>div>.q-bar .q-btn-group>.q-btn{height:28px;min-height:28px;padding:0 10px;border-radius:6px!important;font-size:13px;font-weight:450;color:var(--sh-ink-2)}
+body .q-page>div>.q-bar .q-btn-group>.q-btn:hover,body .q-page>div>.q-bar .q-btn-group>.q-btn[aria-expanded="true"]{background:var(--sh-surface-3);color:var(--sh-ink)}
+body .q-page>div>.q-bar .q-btn .q-focus-helper{display:none}
+
+/* client tree, styled like the support console's sidebar */
+body .q-page>.q-splitter--vertical>.q-splitter__before{background:var(--sh-surface-2)}
+body .q-page>.q-splitter--vertical>.q-splitter__before>.q-pa-sm{padding:10px 8px!important}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-item{min-height:32px;padding:0 10px;border-radius:7px;color:var(--sh-ink-2);font-size:14px;font-weight:450}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-item .q-focus-helper{display:none}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-item:hover{background:var(--sh-surface-3);color:var(--sh-ink)}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-item--active{background:var(--sh-surface);color:var(--sh-ink)!important;font-weight:550;box-shadow:0 0 0 1px var(--sh-line),var(--sh-shadow-sm)}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-item__section--avatar{min-width:0;padding-right:10px}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-item .q-icon{font-size:15px;color:var(--sh-muted)}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-item--active .q-icon{color:var(--sh-accent)}
+
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree{color:var(--sh-ink-2);font-size:14px;margin-top:2px}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree__node{padding:0 0 0 14px}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree>.q-tree__node{padding-left:0}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree__node:after,
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree__node-header:before{display:none}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree__node-header{min-height:32px;margin-top:2px;padding:0 8px 0 4px;border-radius:7px}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree__node-header .q-focus-helper{display:none}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree__node-header:hover{background:var(--sh-surface-3);color:var(--sh-ink)}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree__node--selected{background:var(--sh-surface);color:var(--sh-ink)!important;font-weight:550;box-shadow:0 0 0 1px var(--sh-line),var(--sh-shadow-sm)}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree__arrow{margin-right:2px;font-size:18px;color:var(--sh-faint)}
+body .q-page>.q-splitter--vertical>.q-splitter__before .q-tree__node-header .q-icon:not(.q-tree__arrow){font-size:15px}
+
+/* agent list toolbar: Servers / Workstations / Mixed as a segmented control, then search */
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child{align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--sh-line)}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-tabs{flex:none;padding:2px;border-radius:8px;background:var(--sh-surface-3);box-shadow:inset 0 0 0 1px var(--sh-line);color:var(--sh-muted)!important}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-tabs .q-tabs__content{gap:2px}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-tabs .q-tab{min-height:28px;height:28px;padding:0 11px;border-radius:6px;color:var(--sh-muted)}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-tabs .q-tab:hover{color:var(--sh-ink)}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-tabs .q-tab--active{background:var(--sh-surface);color:var(--sh-ink)!important;box-shadow:var(--sh-shadow-sm),0 0 0 1px var(--sh-line)}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-tabs .q-tab__indicator{display:none}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-tabs .q-tab__icon{font-size:14px;width:auto;height:auto;margin-right:6px}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-tabs .q-tab__content{min-width:0;padding:0}
+
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field{padding:0!important;max-width:min(450px,50%)}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field .q-field__control{height:34px;min-height:34px;padding:0 10px}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field .q-field__marginal{height:34px}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field .q-field__prepend .q-icon{font-size:17px;color:var(--sh-muted)!important}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field .q-field__native{padding:0;min-height:34px}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field .q-field__label{top:7px}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field.q-field--float .q-field__label{opacity:0}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field .q-field__after{height:34px;padding-left:6px}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field .q-field__after .q-btn{width:34px;height:34px;border-radius:8px;color:var(--sh-ink-2);box-shadow:inset 0 0 0 1px var(--sh-line-strong);background:var(--sh-surface)}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field .q-field__after .q-btn:hover{background:var(--sh-surface-3)}
+body .q-splitter--horizontal>.q-splitter__before>.row:first-child>.q-field .q-field__after .q-btn .q-icon{font-size:18px}
+
+/* the agent table runs edge to edge on the page */
+body .agents-tbl-sticky.q-table__card,body .agents-tbl-sticky.q-table__card.q-table--dark{background:var(--sh-bg);border-radius:0;box-shadow:none}
+body .agents-tbl-sticky .table-bgcolor thead tr:first-child th,body .agents-tbl-sticky .table-bgcolor-dark thead tr:first-child th,
+body .agents-tbl-sticky .q-table__bottom{background-color:var(--sh-bg)}
+body .agents-tbl-sticky thead tr:first-child th{height:36px;padding-top:0;padding-bottom:0}
+body .agents-tbl-sticky .q-table tbody td,body .agents-tbl-sticky.q-table--dense .q-table tbody tr,body .agents-tbl-sticky.q-table--dense .q-table tbody td{height:34px;font-variant-numeric:tabular-nums}
+body .agents-tbl-sticky.q-table--dense .q-table th:first-child,body .agents-tbl-sticky.q-table--dense .q-table td:first-child{padding-left:14px}
+
+/* agent detail tabs, and the tables inside them, which sit flush like the agent table */
+body .tabs-tbl-sticky.q-table__card,body .tabs-tbl-sticky.q-table__card.q-table--dark{background:transparent;border-radius:0;box-shadow:none}
+body .q-splitter--horizontal>.q-splitter__after .tabs-tbl-sticky thead tr:first-child th{background-color:var(--sh-bg)}
+body .q-splitter--horizontal>.q-splitter__after .q-header{border-bottom:1px solid var(--sh-line)}
+body .q-splitter--horizontal>.q-splitter__after .q-header .q-tabs{padding:0 6px;color:var(--sh-muted)!important}
+body .q-splitter--horizontal>.q-splitter__after .q-header .q-tab{min-height:40px;padding:0 10px;color:var(--sh-muted)}
+body .q-splitter--horizontal>.q-splitter__after .q-header .q-tab:hover{color:var(--sh-ink)}
+body .q-splitter--horizontal>.q-splitter__after .q-header .q-tab--active{color:var(--sh-ink)!important}
+body .q-splitter--horizontal>.q-splitter__after .q-header .q-tab__indicator{background:var(--sh-ink);color:var(--sh-ink)!important}
+body .q-splitter--horizontal>.q-splitter__after .q-header .q-tab__icon{font-size:14px;width:auto;height:auto;margin-right:7px}
+body .q-splitter--horizontal>.q-splitter__after .q-header .q-tab--active .q-tab__icon{color:var(--sh-accent)}
+body .q-splitter--horizontal>.q-splitter__after .q-header .q-tab .q-badge{top:2px}
+
+/* ============================================================
+   Sign-in. Upstream always renders it dark.
+   ============================================================ */
+body .q-page.bg-image{
+  position:relative;overflow:hidden;flex-direction:column;flex-wrap:nowrap;gap:20px;padding:32px 16px;
+  background:
+    radial-gradient(900px 520px at 50% -12%,color-mix(in srgb,var(--sh-accent) 22%,transparent),transparent 68%),
+    radial-gradient(640px 420px at 88% 112%,color-mix(in srgb,var(--sh-accent) 10%,transparent),transparent 70%),
+    var(--sh-bg)!important;
+}
+body .q-page.bg-image::before{
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:.6;
+  background-image:linear-gradient(var(--sh-line) 1px,transparent 1px),linear-gradient(90deg,var(--sh-line) 1px,transparent 1px);
+  background-size:48px 48px;background-position:center -1px;
+  -webkit-mask-image:radial-gradient(ellipse 62% 52% at 50% 38%,#000 10%,transparent 78%);
+  mask-image:radial-gradient(ellipse 62% 52% at 50% 38%,#000 10%,transparent 78%);
+}
+body .q-page.bg-image::after{
+  content:"Locked out? An administrator can reset your password or two-factor code.";
+  position:relative;width:min(400px,100%);text-align:center;text-wrap:balance;font-size:12.5px;line-height:1.5;color:var(--sh-faint);
+}
+body .q-page.bg-image>.q-card{
+  position:relative;z-index:1;width:min(400px,100%)!important;padding:32px 28px 24px;border-radius:16px;
+  background:color-mix(in srgb,var(--sh-surface) 90%,transparent);
+  box-shadow:0 0 0 1px var(--sh-line),inset 0 1px 0 color-mix(in srgb,var(--sh-ink) 6%,transparent),var(--sh-shadow-lg);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  animation:skin-pop var(--sh-med) var(--sh-ease) both;
+}
+body .q-page.bg-image>.q-card>.q-card__section{padding:0}
+body .q-page.bg-image>.q-card>.q-card__section:first-child>.text-center{display:flex;flex-direction:column;align-items:center;padding:0!important}
+body .q-page.bg-image>.q-card>.q-card__section:first-child>.text-center::before{content:"";width:52px;height:52px;margin-bottom:20px;background:url("mark.webp") center/contain no-repeat;filter:drop-shadow(0 6px 18px color-mix(in srgb,var(--sh-accent) 35%,transparent))}
+body .q-page.bg-image>.q-card>.q-card__section:first-child>.text-center:has(.jc-login)::before{display:none}
+body .q-page.bg-image .text-h4{flex:none;font-size:22px;font-weight:650;letter-spacing:-.025em;line-height:1.2;color:var(--sh-ink);white-space:normal}
+body .q-page.bg-image>.q-card>.q-card__section:first-child>.text-center::after{content:"Welcome back. Sign in with your technician account.";margin-top:6px;font-size:14px;line-height:1.5;color:var(--sh-muted)}
+
+body .q-page.bg-image .q-form.q-gutter-md{display:flex;flex-direction:column;gap:6px;margin:26px 0 0!important}
+body .q-page.bg-image .q-form.q-gutter-md>*{margin:0!important}
+body .q-page.bg-image .q-field--filled .q-field__control{border-radius:10px;background:var(--sh-surface-2)}
+body .q-page.bg-image .q-field--filled .q-field__label{color:var(--sh-muted)}
+body .q-page.bg-image .q-field--filled.q-field--highlighted .q-field__label{color:var(--sh-accent-text)}
+body .q-page.bg-image .q-field__append .q-icon{color:var(--sh-muted);font-size:20px;transition:color var(--sh-fast)}
+body .q-page.bg-image .q-field__append .q-icon:hover{color:var(--sh-ink)}
+body .q-page.bg-image .q-field__native{font-size:15px}
+body .q-page.bg-image .q-field__native:-webkit-autofill{-webkit-text-fill-color:var(--sh-ink);-webkit-box-shadow:0 0 0 40px var(--sh-surface-2) inset;caret-color:var(--sh-ink);transition:background-color 9999s}
+
+body .q-page.bg-image .q-form .q-btn[type="submit"]{height:46px;min-height:46px;margin-top:6px;border-radius:10px;font-size:14px;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 1px 2px rgba(0,0,0,.4),0 8px 24px color-mix(in srgb,var(--sh-accent) 28%,transparent)}
+body .q-page.bg-image .q-form .q-btn[type="submit"]:before{box-shadow:none}
+body .q-page.bg-image .q-form .q-btn[type="submit"] .block{font-size:0;line-height:0}
+body .q-page.bg-image .q-form .q-btn[type="submit"] .block::after{content:"Sign in";display:block;font-size:14px;line-height:20px}
+body .q-page.bg-image .q-form .q-btn[type="submit"] .q-btn__content::after{content:"arrow_forward" / "";margin-left:8px;font:normal 18px/1 "Material Icons";-webkit-font-feature-settings:"liga";font-feature-settings:"liga";transition:transform var(--sh-fast) var(--sh-ease)}
+body .q-page.bg-image .q-form .q-btn[type="submit"]:hover .q-btn__content::after{transform:translateX(2px)}
+
+body .q-page.bg-image>.q-card::after{
+  content:"Secured with two-factor authentication";display:block;width:fit-content;margin:22px auto 0;padding-left:20px;
+  font-size:12px;line-height:16px;color:var(--sh-faint);
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235c6370' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z'/%3E%3Cpath d='m9 12 2 2 4-4'/%3E%3C/svg%3E") 0 50%/14px no-repeat;
+}
+
+/* single sign-on providers, when an administrator has set them up */
+body .q-page.bg-image>.q-card>.q-card__section:nth-child(3){margin-top:20px}
+body .q-page.bg-image>.q-card>.q-card__section:nth-child(3)>.text-h6{margin:0 0 12px!important;font-family:var(--sh-mono);font-size:10.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--sh-faint)}
+body .q-page.bg-image>.q-card>.q-card__section:nth-child(3)>.q-separator{display:none}
+body .q-page.bg-image>.q-card>.q-card__section:nth-child(3) .q-list{display:grid;gap:8px;padding:0!important;border:0}
+body .q-page.bg-image>.q-card>.q-card__section:nth-child(3) .q-item{min-height:42px;padding:0 14px!important;border-radius:10px;background:var(--sh-surface-2);box-shadow:inset 0 0 0 1px var(--sh-line-strong);font-weight:500}
+body .q-page.bg-image>.q-card>.q-card__section:nth-child(3) .q-item:hover{background:var(--sh-surface-3)}
+
+/* two-factor step */
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]){width:min(400px,calc(100vw - 32px));min-width:0!important}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"])::before{content:"lock" / "";display:grid;place-items:center;width:48px;height:48px;margin:28px auto 0;border-radius:13px;background:color-mix(in srgb,var(--sh-accent) 14%,transparent);color:var(--sh-accent-text);font:normal 24px/1 "Material Icons";-webkit-font-feature-settings:"liga";font-feature-settings:"liga"}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-form>.q-card__section:first-child{padding:16px 28px 0;font-size:0!important;text-align:center}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-form>.q-card__section:first-child::before{content:"Enter your 6-digit code";display:block;font-size:20px;font-weight:650;letter-spacing:-.02em;line-height:1.25;color:var(--sh-ink)}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-form>.q-card__section:first-child::after{content:"Open your authenticator app and enter the code it shows for this account.";display:block;margin-top:6px;font-size:14px;font-weight:400;letter-spacing:0;line-height:1.5;color:var(--sh-muted)}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-form>.q-card__section:nth-child(2){padding:22px 28px 2px}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-field__control{height:58px;border-radius:10px}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-field__native{text-align:center;padding-left:.4em;font:500 26px/1 var(--sh-mono);letter-spacing:.4em}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-card__actions{display:flex;flex-wrap:nowrap;gap:10px;padding:6px 28px 28px}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-card__actions .q-btn{flex:1;height:42px;min-height:42px;margin:0!important;border-radius:10px;font-size:14px;font-weight:600}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-card__actions .q-btn:not([type="submit"]){color:var(--sh-ink);box-shadow:inset 0 0 0 1px var(--sh-line-strong)}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-card__actions .q-btn:not([type="submit"]):hover{background:var(--sh-surface-3)}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-card__actions .q-btn[type="submit"]{background:var(--sh-accent);color:var(--sh-accent-ink)}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-card__actions .q-btn[type="submit"]:hover{background:var(--sh-accent-hover)}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-card__actions .q-btn .q-focus-helper{display:none}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-card__actions .q-btn[type="submit"] .block{font-size:0;line-height:0}
+body .q-dialog .q-card:has(input[autocomplete="one-time-code"]) .q-card__actions .q-btn[type="submit"] .block::after{content:"Verify and sign in";display:block;font-size:14px;line-height:20px}
+
+/* "Your session has expired" */
+body .fixed-center.text-center>.text-faded{margin-bottom:16px;font-size:16px;font-weight:600;color:var(--sh-ink)!important}
+
+@keyframes skin-pop{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){body *,body *::before,body *::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}

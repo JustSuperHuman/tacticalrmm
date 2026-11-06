@@ -981,6 +981,10 @@ echo "window._env_ = {PROD_URL: \"https://${rmmdomain}\"}" | sudo tee /var/www/r
 sudo chown www-data:www-data -R /var/www/rmm/dist
 rm -f /tmp/${webtar}
 
+# This fork's dashboard skin (see dashboard-skin/README.md). Remove this block
+# to serve the stock upstream look.
+bash /rmm/dashboard-skin/apply.sh /var/www/rmm/dist || echo "Dashboard skin was not applied"
+
 nginxfrontend="$(
   cat <<EOF
 server {
