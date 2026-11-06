@@ -1,10 +1,13 @@
 import hashlib
+import io
 import json
 import tempfile
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -19,6 +22,7 @@ from accounts.models import Role, User
 from clients.models import Site
 from logs.models import AuditLog
 
+from . import meshapps
 from .models import SupportAccessCode, SupportBranding, SupportInstaller, code_digest
 
 TEST_SETTINGS = {
@@ -628,3 +632,120 @@ class ConcurrentDownloadTests(TransactionTestCase):
             self.assertEqual(sorted(statuses), [200, 403])
             code.refresh_from_db()
             self.assertEqual(code.download_count, 1)
+
+
+GROUP = {"id": "mesh//GroupId", "short_id": "GroupId", "name": "TacticalRMM Support"}
+MESH_SITE = type("Core", (), {"mesh_site": "https://mesh.example.com"})()
+
+
+def mesh_downloads(windows=b"MZ" + b"w" * 64, package=b"xar!" + b"p" * 64):
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("MeshAgent.pkg", package)
+        bundle.writestr("Uninstall.command", "#!/bin/sh\n")
+    responses = {"meshagents": windows, "meshosxagent": archive.getvalue()}
+    return lambda url: next(v for k, v in responses.items() if f"/{k}?" in url)
+
+
+@override_settings(**TEST_SETTINGS)
+class UnsignedSupportAppTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.admin = baker.make(User, is_superuser=True)
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        for target, value in (
+            ("support.meshapps.mesh.find_group", GROUP),
+            ("support.meshapps.get_core_settings", MESH_SITE),
+            ("support.host.mesh.find_group", GROUP),
+        ):
+            patcher = patch(target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def publish(self, **kwargs):
+        with override_settings(SUPPORT_INSTALLER_DIR=self.temporary.name), patch(
+            "support.meshapps._download", side_effect=mesh_downloads(**kwargs)
+        ) as download:
+            return meshapps.publish(), download
+
+    def test_both_apps_come_from_the_support_group_unsigned(self):
+        results, download = self.publish()
+        self.assertEqual(results, {"windows": "published", "macos": "published"})
+        urls = [call.args[0] for call in download.call_args_list]
+        self.assertEqual(
+            urls,
+            [
+                "https://mesh.example.com/meshagents?id=4&meshid=GroupId&installflags=1",
+                "https://mesh.example.com/meshosxagent?id=10005&meshid=GroupId&installflags=0",
+            ],
+        )
+        for installer in SupportInstaller.objects.all():
+            self.assertFalse(installer.signed)
+            stored = Path(self.temporary.name) / installer.storage_name
+            self.assertEqual(
+                hashlib.sha256(stored.read_bytes()).hexdigest(), installer.sha256
+            )
+        self.assertTrue(
+            (
+                Path(self.temporary.name)
+                / SupportInstaller.objects.get(platform="macos").storage_name
+            )
+            .read_bytes()
+            .startswith(b"xar!")
+        )
+
+    def test_signed_apps_are_kept(self):
+        make_installer(self.temporary.name, "windows")
+        results, _ = self.publish()
+        self.assertEqual(results["windows"], "kept signed")
+        self.assertTrue(SupportInstaller.objects.get(platform="windows").signed)
+        self.assertFalse(SupportInstaller.objects.get(platform="macos").signed)
+
+    def test_files_that_arent_installers_are_refused(self):
+        with self.assertRaisesMessage(meshapps.Unavailable, "Windows program"):
+            self.publish(windows=b"<html>login</html>")
+        with self.assertRaisesMessage(meshapps.Unavailable, "Mac installer package"):
+            self.publish(package=b"not a package")
+        self.assertFalse(SupportInstaller.objects.exists())
+
+    def test_the_support_page_offers_them_and_says_what_to_expect(self):
+        self.publish()
+        make_invitation(self.admin)
+        public = Client()
+        public.post("/support/", {"code": "123456789"})
+        page = public.get("/support/", HTTP_USER_AGENT=WINDOWS_UA)
+        self.assertContains(page, "Windows may warn you before it opens")
+        self.assertContains(
+            page, "<b>More info</b>, then <b>Run anyway</b>", html=False
+        )
+        self.assertContains(page, "<b>Open Anyway</b>", html=False)
+        self.assertNotContains(page, "Signed by")
+        with override_settings(SUPPORT_INSTALLER_DIR=self.temporary.name):
+            response = public.post("/support/download/windows/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(b"".join(response.streaming_content).startswith(b"MZ"))
+
+    def test_only_settings_admins_can_get_them(self):
+        role = baker.make(Role, can_use_mesh=True, can_install_agents=True)
+        self.client.force_login(baker.make(User, role=role))
+        with patch("support.meshapps.publish") as publish:
+            response = self.client.post("/support/manage/settings/", {"action": "apps"})
+        self.assertEqual(response.status_code, 403)
+        publish.assert_not_called()
+        self.client.force_login(self.admin)
+        with patch("support.meshapps.publish", return_value={"windows": "published"}):
+            response = self.client.post("/support/manage/settings/", {"action": "apps"})
+        self.assertRedirects(
+            response,
+            "/support/manage/settings/?saved=apps",
+            fetch_redirect_response=False,
+        )
+        with patch(
+            "support.meshapps.publish",
+            side_effect=meshapps.Unavailable("Create the support group first."),
+        ):
+            response = self.client.post("/support/manage/settings/", {"action": "apps"})
+        self.assertContains(
+            response, "Create the support group first.", status_code=503
+        )

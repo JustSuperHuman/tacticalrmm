@@ -78,6 +78,7 @@ def validate_bundle(directory):
                     "sha256": digest,
                     "size": size,
                     "signer": signer.strip(),
+                    "signed": True,
                 },
             )
         return validated

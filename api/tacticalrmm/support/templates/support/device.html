@@ -23,7 +23,7 @@
   </header>
 
   {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
-  {% if not device.online %}<div class="sh-alert sh-alert--warn" role="status">This computer is offline, so you can’t join it or run commands. Ask them to open the support app again{% if device.windows %}. It’s in the Start menu as Tactical RMM Support{% endif %}.</div>{% endif %}
+  {% if not device.online %}<div class="sh-alert sh-alert--warn" role="status">This computer is offline, so you can’t join it or run commands. Ask them to open the support app again{% if device.windows %}: the file they downloaded, or Tactical RMM Support in the Start menu{% endif %}.</div>{% endif %}
   {% if sent == 'started' and not device.agent %}<div class="sh-alert sh-alert--ok" role="status">They chose Yes. The RMM agent is installing, which usually takes a minute or two.</div>
   {% elif sent == 'sent' and not device.agent %}<div class="sh-alert sh-alert--ok" role="status">{% if device.windows %}Install sent. Ask them to choose Yes on the Windows prompt. You won’t see the prompt when you join.{% else %}Install started. The support app closes during the install, so this computer will show as offline here.{% endif %}</div>{% endif %}
   {% if saved_command %}<div class="sh-alert sh-alert--ok" role="status">Saved to the toolbox as “{{ saved_command }}”.</div>{% endif %}

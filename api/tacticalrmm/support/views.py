@@ -118,6 +118,10 @@ def _device(request):
     return ""
 
 
+def _unsigned(installer):
+    return installer is not None and not installer.signed
+
+
 def _context(request, **extra):
     grant = _grant(request)
     installers = {i.platform: i for i in SupportInstaller.objects.all()}
@@ -136,6 +140,8 @@ def _context(request, **extra):
             }
             for key in order
         ],
+        "windows_unsigned": _unsigned(installers.get("windows")),
+        "mac_unsigned": _unsigned(installers.get("macos")),
         "grant": grant,
         "grant_expiry": (
             datetime.fromtimestamp(

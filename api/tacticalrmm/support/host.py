@@ -27,7 +27,7 @@ from logs.models import AuditLog
 from tacticalrmm.constants import AuditActionType, AuditObjType
 from tacticalrmm.permissions import _has_perm
 
-from . import mesh, screens
+from . import mesh, meshapps, screens
 from .forms import BrandingForm, CreateAccessCodeForm
 from .models import (
     SupportAccessCode,
@@ -565,6 +565,7 @@ def setup(request):
         "branding_saved": request.GET.get("saved") == "branding",
         "group_created": request.GET.get("saved") == "group",
         "previews_saved": request.GET.get("saved") == "previews",
+        "apps_saved": request.GET.get("saved") == "apps",
         "page": "settings",
         "groups": nav_groups(),
         "portal_url": public_url(request),
@@ -600,6 +601,23 @@ def setup(request):
                 )
             context["branding_form"] = form
             status = 400
+        elif action == "apps":
+            try:
+                results = meshapps.publish()
+            except (meshapps.Unavailable, mesh.MeshError) as exc:
+                context["error"] = f"Couldn’t get the support apps. {exc}"
+                status = 503
+            else:
+                AuditLog.objects.create(
+                    username=request.user.username,
+                    action=AuditActionType.MODIFY,
+                    object_type=AuditObjType.CORE,
+                    message="Published unsigned support apps from MeshCentral.",
+                    after_value=results,
+                )
+                return _headers(
+                    HttpResponseRedirect(f"{reverse('support:settings')}?saved=apps")
+                )
         elif action == "previews":
             saved = SupportBranding.load()
             saved.screen_previews = request.POST.get("screen_previews") == "on"

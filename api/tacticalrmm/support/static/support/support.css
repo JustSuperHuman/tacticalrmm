@@ -325,6 +325,7 @@
 .sp-apps li > div { flex: 1; min-width: 0; }
 .sp-apps b { display: block; font-weight: 550; }
 .sp-apps li > div span { display: block; font-size: var(--sh-text-xs); color: var(--sh-muted); overflow-wrap: anywhere; }
+.sp-apps-foot { display: grid; gap: 10px; justify-items: start; padding: 14px 20px 18px; border-top: 1px solid var(--sh-line); }
 .sp-tile { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; flex: none; background: color-mix(in srgb, var(--sh-accent) 10%, transparent); color: var(--sh-accent-text); }
 .sp-tile .sp-icon { width: 18px; height: 18px; }
 .sp-logo-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 16px; align-items: start; }

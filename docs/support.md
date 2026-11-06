@@ -62,6 +62,12 @@ To give the public support page its own address, point that name at the server, 
 
 Technicians sign in to the dashboard. The session is shared across the root domain, so the console at `https://<support address>/support/manage/` and `https://<api-host>/support/manage/` both work after that.
 
+## Unsigned support apps until signing is ready
+
+Until signed apps are published, **Get unsigned apps from MeshCentral** in the console's **Settings** (or `python manage.py publish_meshcentral_installers` on the server) takes both apps straight from MeshCentral for the support group. Windows gets MeshCentral's x64 **interactive only** agent: a small window with a Connect button, run by the person's own account, with no service and the group's settings built in. The Mac gets MeshCentral's universal installer package, which installs the agent as a service. Getting them needs the global settings permission and is recorded in the audit log.
+
+These apps aren't code-signed by you, so people see a warning first. The support page tells them what to expect: on Windows, **More info**, then **Run anyway**; on a Mac, **System Settings** > **Privacy & Security** > **Open Anyway**. Settings marks them **Unsigned**. Signed apps already published are kept unless you pass `--replace-signed`, and publishing signed apps later replaces the unsigned ones. Get them again after changing MeshCentral's group, address or certificate.
+
 ## Build signed installers
 
 Run the **Signed support installers** workflow manually from a trusted branch and provide a release version, such as `1.0.0`. Create a GitHub environment named **`support-signing`**. Restrict that environment to your release branch and authorized release operators. The workflow fetches configured binaries from your MeshCentral server over verified HTTPS, signs the final Windows executable with Azure, signs the Mac payload and package with Apple, notarizes and staples it, then emits the **`signed-support-installers`** artifact.
@@ -132,7 +138,7 @@ SUPPORT_INSTALLER_DIR = "/var/lib/tactical-support/installers"
 SUPPORT_MESH_GROUP = "TacticalRMM Support"  # MeshCentral group name or ID
 ```
 
-Apply the migration and collect static files even before publishing installers. The page remains usable and shows each unavailable download clearly. No unsigned fallback is served. For a custom support hostname, point it at the Django backend and configure the application's allowed hosts, TLS, session cookie domain, and CSRF trusted origins consistently. Serving `/support/` on the existing API hostname works with the standard nginx configuration.
+Apply the migration and collect static files even before publishing installers. The page remains usable and shows each unavailable download clearly. For a custom support hostname, point it at the Django backend and configure the application's allowed hosts, TLS, session cookie domain, and CSRF trusted origins consistently. Serving `/support/` on the existing API hostname works with the standard nginx configuration.
 
 ## Verification
 

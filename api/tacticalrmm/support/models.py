@@ -226,6 +226,8 @@ class SupportInstaller(models.Model):
     sha256 = models.CharField(max_length=64)
     size = models.PositiveIntegerField()
     signer = models.CharField(max_length=255)
+    # False for the interim apps taken straight from MeshCentral (meshapps.py).
+    signed = models.BooleanField(default=True)
     published_at = models.DateTimeField(auto_now=True)
 
     @property
