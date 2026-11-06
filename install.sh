@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 
 SCRIPT_VERSION="93"
-SCRIPT_URL="https://raw.githubusercontent.com/amidaware/tacticalrmm/master/install.sh"
+# This fork installs and updates from its own branch. Use amidaware/tacticalrmm and
+# master to follow upstream instead.
+TRMM_REPO='JustSuperHuman/tacticalrmm'
+TRMM_BRANCH='remote-support'
+
+SCRIPT_URL="https://raw.githubusercontent.com/${TRMM_REPO}/${TRMM_BRANCH}/install.sh"
 
 sudo apt update
 sudo apt install -y curl wget jq lsb-release ca-certificates openssl
@@ -11,11 +16,6 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m'
-
-# This fork installs and updates from its own branch. Use amidaware/tacticalrmm and
-# master to follow upstream instead.
-TRMM_REPO='JustSuperHuman/tacticalrmm'
-TRMM_BRANCH='remote-support'
 
 SCRIPTS_DIR='/opt/trmm-community-scripts'
 PYTHON_VER='3.12.13'
