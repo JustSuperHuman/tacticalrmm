@@ -1,4 +1,4 @@
-<form method="post" class="sp-form">
+<form method="post" class="sp-form" data-busy>
   {% csrf_token %}<input type="hidden" name="action" value="install">
   <div class="sp-two">
     <div class="sh-field">
@@ -16,6 +16,6 @@
       </select>
     </div>
   </div>
-  <button class="sh-btn {% if primary %}sh-btn--primary {% endif %}sh-btn--lg sh-btn--block" type="submit"{% if not device.online or not sites %} disabled{% endif %}>Install RMM agent</button>
-  <p class="sh-hint">{% if device.windows %}Windows will ask them to allow it, and may ask for an administrator password.{% else %}Installs in the background. Mac agents need a Tactical RMM code signing token on this server.{% endif %}</p>
+  <button class="sh-btn sh-btn--lg sh-btn--block" type="submit" data-busy-label="{% if device.windows %}Waiting for their answer…{% else %}Starting the install…{% endif %}"{% if not device.online or not sites %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-download"/></svg>Install RMM agent</button>
+  <p class="sh-hint">{% if not sites %}You need access to at least one client site to install the agent.{% elif device.windows %}Windows asks them to allow it, and may ask for an administrator password. You won’t see that prompt in the remote desktop, so tell them to choose Yes.{% else %}Installs in the background. The support app closes during the install. Mac agents need a Tactical RMM code signing token on this server.{% endif %}</p>
 </form>

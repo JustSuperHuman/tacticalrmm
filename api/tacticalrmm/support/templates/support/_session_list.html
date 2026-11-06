@@ -1,0 +1,55 @@
+<div class="sp-list-pane">
+  <div class="sp-list-head">
+    <label class="sh-sr" for="session-search">Search sessions</label>
+    <div class="sp-search">
+      <svg class="sp-icon" aria-hidden="true"><use href="#i-search"/></svg>
+      <input class="sh-input" id="session-search" type="search" placeholder="Search sessions…" autocomplete="off" spellcheck="false" aria-describedby="search-hint">
+      <kbd class="sh-kbd" id="search-hint" title="Press / to search">/</kbd>
+    </div>
+  </div>
+  <div class="sp-list" id="session-list" data-live="10">
+    {% if list_error %}
+    <div class="sp-list-note sp-list-note--error" role="alert"><svg class="sp-icon" aria-hidden="true"><use href="#i-alert"/></svg><div><b>Can’t list computers right now</b><span>{{ list_error }} Codes still work.</span></div></div>
+    {% elif not mesh_group %}
+    <div class="sp-list-note"><svg class="sp-icon" aria-hidden="true"><use href="#i-alert"/></svg><div><b>The support group isn’t set up yet</b><span>{% if can_setup %}Create it in <a href="{% url 'support:settings' %}">Settings</a>, then build the support apps for it.{% else %}Ask an administrator to create it in Settings.{% endif %}</span></div></div>
+    {% endif %}
+    <ul class="sp-rows">
+      {% for row in rows %}
+      <li data-groups="{{ row.groups|join:' ' }}" data-search="{{ row.search }}"{% if row.hidden %} hidden{% endif %}>
+        <a class="sp-row" href="{{ row.href }}" data-id="{{ row.id }}" data-version="{{ row.version }}" data-screen="{{ row.screen_at|default_if_none:'' }}"{% if row.selected %} aria-current="page"{% endif %}>
+          <span class="sp-thumb sp-thumb--{{ row.platform }}{% if row.kind == 'device' %}{% if row.online %} is-online{% else %} is-offline{% endif %}{% elif not row.waiting %} is-offline{% endif %}" aria-hidden="true">{% if row.screen_at %}<img src="{{ row.url }}screen/?v={{ row.screen_at }}" alt="" width="64" height="40" decoding="async">{% else %}<svg class="sp-icon{% if row.platform == 'windows' or row.platform == 'macos' %} sp-icon--fill{% endif %}"><use href="#i-{% if row.platform == 'windows' or row.platform == 'macos' %}{{ row.platform }}{% elif row.platform == 'code' %}key{% else %}monitor{% endif %}"/></svg>{% endif %}</span>
+          <span class="sp-row-main">
+            <b class="sp-row-title">{{ row.title }}</b>
+            <span class="sp-row-sub">{{ row.detail }}</span>
+          </span>
+          <span class="sp-row-meta">
+            {% if row.kind == 'device' %}
+              {% if row.online %}<span class="sp-row-state sp-row-state--ok"><span class="sh-sr">Connected for </span>{% if row.since %}<time datetime="{{ row.since|date:'c' }}" data-ago>{{ row.since|timesince }}</time>{% else %}Connected{% endif %}</span>{% else %}<span class="sp-row-state">Offline</span>{% endif %}
+              {% if row.monitoring == 'monitored' %}<span class="sh-pill sh-pill--accent">Monitored</span>{% elif row.monitoring == 'stalled' %}<span class="sh-pill sh-pill--danger">No check-in</span>{% elif row.monitoring == 'installing' %}<span class="sh-pill sh-pill--warn">Installing</span>{% endif %}
+            {% elif row.waiting %}
+              <span class="sp-row-state sp-row-state--warn">{% if row.downloads %}Downloaded{% else %}Waiting{% endif %}</span>
+              <span class="sp-row-time">until <time datetime="{{ row.expires|date:'c' }}" data-local>{{ row.expires|date:'H:i' }}</time></span>
+            {% else %}
+              <span class="sp-row-state">{{ row.status }}</span>
+              <span class="sp-row-time"><time datetime="{{ row.created|date:'c' }}" data-local>{{ row.created|date:'M j' }}</time></span>
+            {% endif %}
+          </span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% for g in groups %}
+    <div class="sp-list-empty" data-empty-for="{{ g.key }}"{% if g.key != group or g.count %} hidden{% endif %}>
+      {% if g.key == 'all' %}<b>No sessions yet</b><span>Start one with New session. When they enter the code and open the support app, their computer shows up here.</span>
+      {% elif g.key == 'mine' %}<b>Nothing of yours yet</b><span>Sessions you start, and computers you move into monitoring, collect here.</span>
+      {% elif g.key == 'connected' %}<b>No one’s connected</b><span>Computers show up here the moment the support app opens. You don’t need to refresh.</span>
+      {% elif g.key == 'waiting' %}<b>No codes waiting</b><span>New sessions wait here until someone enters the code and their computer connects.</span>
+      {% elif g.key == 'offline' %}<b>Nothing offline</b><span>When the support app closes, the computer moves here until you end its session.</span>
+      {% elif g.key == 'monitoring' %}<b>Nothing moving to monitoring</b><span>Open a connected computer and use its Monitoring tab to install the RMM agent.</span>
+      {% else %}<b>No past codes</b><span>Codes that expire, run out of downloads or get cancelled end up here.</span>{% endif %}
+    </div>
+    {% endfor %}
+    <div class="sp-list-empty" data-empty-for="search" hidden><b>No matches</b><span>Nothing in this group matches your search. Try a computer name, a signed-in user or a client.</span></div>
+  </div>
+  <p class="sp-list-foot"><span class="sp-live-dot" aria-hidden="true"></span>Updates on its own</p>
+</div>

@@ -1,0 +1,5 @@
+<article class="sp-entry{% if run.no_reply %} sp-entry--quiet{% endif %}">
+  <header class="sp-entry-head"><span>{{ run.user.username|default:'Someone' }}</span><time datetime="{{ run.ran_at|date:'c' }}" data-local>{{ run.ran_at|date:'H:i' }}</time></header>
+  <pre class="sp-entry-cmd"><span class="sp-prompt" aria-hidden="true">{{ run.prompt }}</span>{{ run.command }}</pre>
+  <pre class="sp-entry-out">{% if run.no_reply %}{{ no_reply_text }}{% else %}{{ run.output|default:'(no output)' }}{% endif %}</pre>
+</article>

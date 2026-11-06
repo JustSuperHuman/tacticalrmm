@@ -1,0 +1,88 @@
+{% extends 'support/sessions.html' %}
+{% block title %}{{ code.label|default:'Support session' }}{% endblock %}
+{% block crumb %}{{ code.label|default:'Support session' }}{% endblock %}
+{% block detail %}
+<div class="sp-detail-inner">
+  <a class="sp-detail-back" href="{% url 'support:manage' %}{% if group != 'all' %}?group={{ group }}{% endif %}" data-back><svg class="sp-icon" aria-hidden="true"><use href="#i-back"/></svg>{{ group_label }}</a>
+  <header class="sp-detail-head">
+    <div class="sp-detail-id">
+      <span class="sp-glyph sp-glyph--lg sp-glyph--code{% if code.status != 'Active' %} is-offline{% endif %}" aria-hidden="true"><svg class="sp-icon"><use href="#i-key"/></svg></span>
+      <div class="sp-detail-text">
+        <h1>{{ code.label|default:'Support session' }}</h1>
+        <p class="sp-detail-status">{% if code.status == 'Active' %}{% if linked %}<span class="sh-pill sh-pill--ok sh-pill--dot">Connected</span>{% else %}<span class="sh-pill sh-pill--warn sh-pill--dot">Waiting to connect</span>{% endif %}{% elif code.status == 'Revoked' %}<span class="sh-pill sh-pill--danger sh-pill--dot">Cancelled</span>{% elif code.status == 'Used' %}<span class="sh-pill sh-pill--dot">Downloads used up</span>{% else %}<span class="sh-pill sh-pill--dot">Expired</span>{% endif %}</p>
+        <p class="sp-detail-sub">{{ code_site }}&nbsp;· Started by {{ code.created_by.username }} at <time datetime="{{ code.created_at|date:'c' }}" data-local>{{ code.created_at|date:'H:i T' }}</time></p>
+      </div>
+    </div>
+    {% if code.status == 'Active' %}
+    <form class="sp-join" method="post" action="{% url 'support:manage' %}" data-confirm="Cancel this code? Anyone who hasn’t downloaded the support app with it yet won’t be able to. Computers already connected stay connected." data-busy>
+      {% csrf_token %}<input type="hidden" name="action" value="revoke"><input type="hidden" name="invitation" value="{{ code.pk }}"><input type="hidden" name="group" value="{{ group }}">
+      <button class="sh-btn sh-btn--danger" type="submit" data-busy-label="Cancelling…">Cancel code</button>
+    </form>
+    {% endif %}
+  </header>
+
+  {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
+
+  {% if new_code %}
+  <section class="sh-card sp-invite" aria-labelledby="invite-title">
+    <div class="sh-card-pad">
+      <h2 id="invite-title" class="sp-invite-title"><svg class="sp-icon" aria-hidden="true"><use href="#i-check"/></svg>Your session is ready. Send them this code.</h2>
+      <output id="new-code" class="sp-new-code">{{ new_code }}</output>
+      <p class="sh-hint">It works for {{ new_lifetime }}. You won’t see the full code again, so send it now.</p>
+      <div class="sp-actions">
+        <button class="sh-btn" type="button" data-copy="{{ new_code }}"><svg class="sp-icon" aria-hidden="true"><use href="#i-copy"/></svg><span>Copy code</span></button>
+        <button class="sh-btn" type="button" data-copy="Go to {{ portal_url }} and enter the code {{ new_code }}. It works for the next {{ new_lifetime }}."><svg class="sp-icon" aria-hidden="true"><use href="#i-send"/></svg><span>Copy invitation</span></button>
+        <a class="sh-btn" href="mailto:?subject={{ 'Your remote support code'|urlencode }}&amp;body={{ 'Go to '|add:portal_url|add:' and enter the code '|add:new_code|add:'. It works for the next '|add:new_lifetime|add:'.'|urlencode }}"><svg class="sp-icon" aria-hidden="true"><use href="#i-mail"/></svg>Email invitation</a>
+      </div>
+      <p id="copy-status" class="sh-sr" role="status"></p>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if linked %}
+  <section class="sp-linked" aria-label="Connected computers">
+    {% for item in linked %}
+    <a class="sp-linked-row" href="{{ item.url }}{% if group != 'all' %}?group={{ group }}{% endif %}" data-nav>
+      <span class="sp-glyph sp-glyph--other is-online" aria-hidden="true"><svg class="sp-icon"><use href="#i-connected"/></svg></span>
+      <span><b>{{ item.title }} connected with this code</b><span>Open the session to join, run commands or move it into monitoring.</span></span>
+      <svg class="sp-icon sp-linked-arrow" aria-hidden="true"><use href="#i-arrow"/></svg>
+    </a>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if code.status == 'Active' %}
+  <section class="sh-card" aria-labelledby="join-title">
+    <header class="sh-card-head"><h2 id="join-title">How they connect</h2></header>
+    <div class="sh-card-pad sp-stack-gap">
+      <ol class="sp-steps">
+        <li><span>On the computer that needs help, they go to <a href="{{ portal_url }}" target="_blank" rel="noopener">{{ portal_url }}</a>.</span></li>
+        <li><span>They enter the code{% if not new_code %} that ends in <b>{{ code.last_three }}</b>{% endif %}.</span></li>
+        <li><span>They download the support app and open it.</span></li>
+      </ol>
+      {% if not linked %}
+      <div class="sp-waiting">
+        <span class="sh-spinner" aria-hidden="true"></span>
+        <div><b>{% if code.download_count %}They’ve downloaded the support app. Waiting for it to connect.{% else %}Waiting for them to enter the code{% endif %}</b><span>Their computer shows up under Connected the moment the app opens. You don’t need to refresh.</span></div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="sh-card">
+    <dl class="sp-facts">
+      <div><dt>Code</dt><dd class="sp-mono">••• ••• {{ code.last_three }}</dd></div>
+      <div><dt>Downloads</dt><dd>{{ code.download_count }} of {{ code.max_downloads }}</dd></div>
+      <div><dt>{% if code.status == 'Expired' %}Expired{% else %}Expires{% endif %}</dt><dd><time datetime="{{ code.expires_at|date:'c' }}" data-local>{{ code.expires_at|date:'M j, H:i T' }}</time></dd></div>
+      {% if code.downloaded_at %}<div><dt>Last download</dt><dd><time datetime="{{ code.downloaded_at|date:'c' }}" data-local>{{ code.downloaded_at|date:'M j, H:i T' }}</time></dd></div>{% endif %}
+      {% if code.revoked_at %}<div><dt>Cancelled</dt><dd><time datetime="{{ code.revoked_at|date:'c' }}" data-local>{{ code.revoked_at|date:'M j, H:i T' }}</time></dd></div>{% endif %}
+    </dl>
+  </section>
+
+  <section aria-labelledby="timeline-title" class="sp-stack-gap">
+    <h2 id="timeline-title" class="sp-section-title">Timeline</h2>
+    {% include 'support/_timeline.html' %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends 'support/base.html' %}
+{% block body %}
+<div class="sh-app sp-app" id="app">
+  <aside class="sh-sidebar sp-sidebar" id="sidebar" aria-label="Remote support">
+    <div class="sh-sidebar-head">
+      <a class="sp-topbar-brand" href="{% url 'support:manage' %}">{% include 'support/_brand.html' %}</a>
+      <button class="sh-btn sh-btn--ghost sh-btn--icon sh-btn--sm sp-nav-close" type="button" data-nav-close aria-label="Close the menu" title="Close the menu"><svg class="sp-icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+    <a class="sh-btn sh-btn--primary sp-new-btn" href="{% url 'support:manage' %}?new=1"{% if workspace %} data-open="new-session"{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-plus"/></svg>New session</a>
+    <nav id="session-nav" aria-label="Session groups">
+      <div class="sh-nav-group">Sessions</div>
+      {% for g in groups %}
+      <a class="sh-nav-item" href="{{ g.href }}" data-group="{{ g.key }}"{% if workspace and g.key == group %} aria-current="page"{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-{{ g.icon }}"/></svg><span>{{ g.label }}</span>{% if g.count is not None %}<span class="sh-count">{{ g.count }}</span>{% endif %}</a>
+      {% endfor %}
+    </nav>
+    <div class="sh-nav-group">Manage</div>
+    <a class="sh-nav-item" href="{% url 'support:toolbox' %}"{% if page == 'toolbox' %} aria-current="page"{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-wrench"/></svg><span>Toolbox</span></a>
+    <a class="sh-nav-item" href="{% url 'support:settings' %}"{% if page == 'settings' %} aria-current="page"{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-sliders"/></svg><span>Settings</span></a>
+    <div class="sh-sidebar-foot">
+      <span class="sh-avatar" aria-hidden="true">{{ user.username|slice:':1'|upper }}</span>
+      <span class="sh-who"><b>{{ user.get_full_name|default:user.username }}</b><span>Technician</span></span>
+    </div>
+  </aside>
+  <div class="sh-scrim" data-nav-close></div>
+  <div class="sh-main{% if workspace %} sp-main--fixed{% endif %}">
+    <header class="sh-topbar">
+      <button class="sh-btn sh-btn--ghost sh-btn--icon sh-menu-toggle" type="button" data-nav-toggle aria-label="Open the menu" title="Open the menu"><svg class="sp-icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+      <div class="sh-crumbs"><span class="sp-hide-phone">Remote support</span><span class="sep sp-hide-phone" aria-hidden="true">/</span><b id="crumb">{% block crumb %}{% endblock %}</b></div>
+      <div class="sh-topbar-actions">
+        <a class="sh-btn sh-btn--ghost sh-btn--sm" href="{{ portal_url|default:'/support/' }}" target="_blank" rel="noopener">Support page<svg class="sp-icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+        <a class="sh-btn sh-btn--ghost sh-btn--sm sp-hide-phone" href="{{ dashboard_url }}">Dashboard<svg class="sp-icon" aria-hidden="true"><use href="#i-external"/></svg></a>
+      </div>
+    </header>
+    {% block main %}{% endblock %}
+  </div>
+</div>
+{% block dialogs %}{% endblock %}
+<p id="announce" class="sh-sr" role="status" aria-live="polite"></p>
+{% endblock %}

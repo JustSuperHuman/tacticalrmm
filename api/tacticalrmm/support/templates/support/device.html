@@ -1,89 +1,216 @@
-{% extends 'support/base.html' %}
-{% block title %}{{ device.name|default:'Support device' }}{% endblock %}
-{% block body %}
-{% include 'support/_console_top.html' %}
-<main id="main" class="sh-content sp-console">
-  <a class="sp-back" href="{% url 'support:devices' %}"><svg class="sp-icon" aria-hidden="true"><use href="#i-back"/></svg>All devices</a>
+{% extends 'support/sessions.html' %}
+{% block title %}{{ device.title|default:'Session' }}{% endblock %}
+{% block crumb %}{{ device.title|default:group_label }}{% endblock %}
+{% block detail %}
+<div class="sp-detail-inner">
+  <a class="sp-detail-back" href="{% url 'support:manage' %}{% if group != 'all' %}?group={{ group }}{% endif %}" data-back><svg class="sp-icon" aria-hidden="true"><use href="#i-back"/></svg>{{ group_label }}</a>
   {% if device %}
-  <div class="sh-page-head">
-    <div>
-      <h1>{{ device.name }}</h1>
-      <p>{{ device.os|default:'Unknown system' }}</p>
+  <header class="sp-detail-head">
+    <div class="sp-detail-id">
+      <span class="sp-glyph sp-glyph--lg sp-glyph--{{ device.platform }}{% if device.online %} is-online{% else %} is-offline{% endif %}" aria-hidden="true"><svg class="sp-icon{% if device.platform != 'other' %} sp-icon--fill{% endif %}"><use href="#i-{% if device.platform == 'other' %}monitor{% else %}{{ device.platform }}{% endif %}"/></svg></span>
+      <div class="sp-detail-text">
+        <h1>{{ device.title }}</h1>
+        <p class="sp-detail-status">{% if device.online %}<span class="sh-pill sh-pill--ok sh-pill--dot">Connected</span>{% if device.connected_at %}<span>for <time datetime="{{ device.connected_at|date:'c' }}" data-ago>{{ device.connected_at|timesince }}</time></span>{% endif %}{% else %}<span class="sh-pill sh-pill--dot">Offline</span>{% endif %}</p>
+        {% if device.named or device.users or device.site %}<p class="sp-detail-sub">{% if device.named %}{{ device.name }}{% endif %}{% if device.users %}{% if device.named %}&nbsp;· {% endif %}{{ device.users|join:', ' }}{% endif %}{% if device.site %}{% if device.named or device.users %}&nbsp;· {% endif %}{{ device.site.client.name }} / {{ device.site.name }}{% endif %}</p>{% endif %}
+      </div>
     </div>
-    <div class="sh-page-actions">{% if device.online %}<span class="sh-pill sh-pill--ok sh-pill--dot">Online</span>{% else %}<span class="sh-pill sh-pill--dot">Offline</span>{% endif %}</div>
-  </div>
-  {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
-  {% if install_sent and not agent %}<div class="sh-alert sh-alert--ok" role="status">{% if device.windows %}Install sent. Ask them to choose Yes on the Windows prompt.{% else %}Install sent. It runs in the background and takes a minute or two.{% endif %}</div>{% endif %}
+    <form class="sp-join" id="join-form" method="post" action="{{ detail_url }}" target="_blank" rel="noopener" data-busy data-busy-reset>
+      {% csrf_token %}<input type="hidden" name="action" value="connect">
+      <button class="sh-btn" type="submit" name="view" value="files" data-busy-label="Opening…" title="Browse and transfer their files in a new tab"{% if not device.online %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-folder"/></svg>Files</button>
+      <button class="sh-btn" type="submit" name="view" value="terminal" data-busy-label="Opening…" title="Open a command line on their computer in a new tab"{% if not device.online %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-terminal"/></svg>Terminal</button>
+      <button class="sh-btn sh-btn--primary sp-join-btn" type="submit" name="view" value="desktop" data-busy-label="Joining…" title="See and control their screen in a new tab"{% if not device.online %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-monitor"/></svg>Join</button>
+    </form>
+  </header>
 
-  <div class="sp-grid sp-grid--even">
-    <section class="sh-card" aria-labelledby="move-title">
+  {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
+  {% if not device.online %}<div class="sh-alert sh-alert--warn" role="status">This computer is offline, so you can’t join it or run commands. Ask them to open the support app again{% if device.windows %}. It’s in the Start menu as Tactical RMM Support{% endif %}.</div>{% endif %}
+  {% if sent == 'started' and not device.agent %}<div class="sh-alert sh-alert--ok" role="status">They chose Yes. The RMM agent is installing, which usually takes a minute or two.</div>
+  {% elif sent == 'sent' and not device.agent %}<div class="sh-alert sh-alert--ok" role="status">{% if device.windows %}Install sent. Ask them to choose Yes on the Windows prompt. You won’t see the prompt when you join.{% else %}Install started. The support app closes during the install, so this computer will show as offline here.{% endif %}</div>{% endif %}
+  {% if saved_command %}<div class="sh-alert sh-alert--ok" role="status">Saved to the toolbox as “{{ saved_command }}”.</div>{% endif %}
+
+  <nav class="sh-tabs sp-tabs" role="tablist" aria-label="Session">
+    <a role="tab" id="tab-general" href="?tab=general" aria-controls="panel-general" aria-selected="{% if tab == 'general' %}true{% else %}false{% endif %}">General</a>
+    <a role="tab" id="tab-commands" href="?tab=commands" aria-controls="panel-commands" aria-selected="{% if tab == 'commands' %}true{% else %}false{% endif %}">Commands{% if runs %}<span class="sp-tab-count">{{ runs|length }}</span>{% endif %}</a>
+    <a role="tab" id="tab-monitoring" href="?tab=monitoring" aria-controls="panel-monitoring" aria-selected="{% if tab == 'monitoring' %}true{% else %}false{% endif %}">Monitoring{% if device.monitoring == 'installing' %}<span class="sp-tab-dot sp-tab-dot--warn" aria-label="Installing"></span>{% elif device.monitoring == 'stalled' %}<span class="sp-tab-dot sp-tab-dot--danger" aria-label="No check-in"></span>{% endif %}</a>
+    <a role="tab" id="tab-notes" href="?tab=notes" aria-controls="panel-notes" aria-selected="{% if tab == 'notes' %}true{% else %}false{% endif %}">Notes{% if notes %}<span class="sp-tab-count">{{ notes|length }}</span>{% endif %}</a>
+    <a role="tab" id="tab-timeline" href="?tab=timeline" aria-controls="panel-timeline" aria-selected="{% if tab == 'timeline' %}true{% else %}false{% endif %}">Timeline</a>
+  </nav>
+
+  {# General #}
+  <div class="sp-panel" role="tabpanel" id="panel-general" aria-labelledby="tab-general"{% if tab != 'general' %} hidden{% endif %}>
+    <div class="sp-overview{% if device.previews %} sp-overview--screen{% endif %}">
+    {% if device.previews %}
+    <section class="sh-card sp-screen-card" aria-labelledby="screen-title">
+      <header class="sh-card-head"><h2 id="screen-title">Their screen</h2><span class="sh-hint" id="screen-age"{% if not device.screen_at %} hidden{% endif %}>Updated <time datetime="{{ device.screen_time|date:'c' }}" data-ago>{{ device.screen_time|timesince }}</time> ago</span></header>
+      {% if device.screen_at %}
+      <button class="sp-screen{% if not device.online %} is-offline{% endif %}" type="submit" form="join-form" name="view" value="desktop" data-no-busy title="{% if device.online %}Join to see and control their screen{% else %}Offline. This is the last picture of their screen.{% endif %}"{% if not device.online %} disabled{% endif %}>
+        <img id="screen-preview" src="{{ detail_url }}screen/?v={{ device.screen_at }}" alt="The latest picture of {{ device.name }}’s screen">
+        {% if device.online %}<span class="sp-screen-join"><svg class="sp-icon" aria-hidden="true"><use href="#i-monitor"/></svg>Join</span>{% else %}<span class="sp-screen-join">Offline</span>{% endif %}
+      </button>
+      {% else %}
+      <div class="sp-screen sp-screen--empty" id="screen-empty">
+        {% if device.online %}<span class="sh-spinner" aria-hidden="true"></span><b>Getting a picture of their screen…</b><span>It shows up here in a few seconds. A locked screen or an open Windows prompt can’t be pictured.</span>
+        {% else %}<b>No picture while they’re offline</b><span>One appears here once they open the support app again.</span>{% endif %}
+      </div>
+      {% endif %}
+    </section>
+    {% endif %}
+    <section class="sh-card">
+      <dl class="sp-facts">
+        <div><dt>Computer</dt><dd>{{ device.name }}</dd></div>
+        <div><dt>System</dt><dd>{{ device.os|default:'Unknown' }}</dd></div>
+        <div><dt>Signed in</dt><dd>{% if device.users %}{{ device.users|join:', ' }}{% else %}<span class="sp-quiet">No one</span>{% endif %}</dd></div>
+        <div><dt>Connected</dt><dd>{% if device.online and device.connected_at %}Since <time datetime="{{ device.connected_at|date:'c' }}" data-local>{{ device.connected_at|date:'M j, H:i T' }}</time>{% elif device.online %}Now{% else %}<span class="sp-quiet">Not now</span>{% endif %}</dd></div>
+        {% if device.first_seen %}<div><dt>First connected</dt><dd><time datetime="{{ device.first_seen|date:'c' }}" data-local>{{ device.first_seen|date:'M j, H:i T' }}</time></dd></div>{% endif %}
+        {% if device.ip %}<div><dt>Address</dt><dd class="sp-mono">{{ device.ip }}</dd></div>{% endif %}
+        {% if device.site %}<div><dt>Client</dt><dd>{{ device.site.client.name }} / {{ device.site.name }}</dd></div>{% endif %}
+        {% if device.code %}<div><dt>Started with</dt><dd><a href="{% url 'support:code' device.code.pk %}">Code ending {{ device.code.last_three }}</a>{% if device.code.created_by %} from {{ device.code.created_by.username }}{% endif %}</dd></div>{% endif %}
+        <div><dt>Monitoring</dt><dd>{% if device.agent %}Monitored as <b>{{ device.agent.hostname }}</b>{% elif device.monitoring == 'stalled' %}<span class="sp-danger-text">No agent has checked in</span>{% elif device.monitoring == 'installing' %}Installing the RMM agent{% else %}<span class="sp-quiet">Support only</span>{% endif %}</dd></div>
+      </dl>
+    </section>
+    </div>
+    {% if device.online and device.platform == 'macos' %}<p class="sh-hint">On a Mac, their screen stays black when you join until they turn on Screen Recording for the support app in System Settings, under Privacy &amp; Security.</p>{% endif %}
+    <section class="sh-card sh-card-pad">
+      <form method="post" action="{{ detail_url }}" class="sp-form" data-busy>
+        {% csrf_token %}<input type="hidden" name="action" value="rename"><input type="hidden" name="tab" value="general"><input type="hidden" name="group" value="{{ group }}">
+        <div class="sh-field">
+          <label class="sh-label" for="session-name">Session name</label>
+          <div class="sp-inline">
+            <input class="sh-input" id="session-name" name="name" maxlength="100" placeholder="{{ device.name }}" value="{% if device.named %}{{ device.session.name }}{% endif %}" autocomplete="off">
+            <button class="sh-btn" type="submit" data-busy-label="Saving…">Save name</button>
+          </div>
+          <p class="sh-hint">Shows in your session list instead of the computer’s name. They don’t see it.</p>
+        </div>
+      </form>
+    </section>
+    {% if not device.agent %}
+    <section class="sp-end">
+      <div><h2>Done helping?</h2><p class="sh-hint">{% if device.online %}End the session to remove the support app, so this computer stops connecting.{% else %}End the session to take this computer off the list. If they open the support app again, it comes back.{% endif %}</p></div>
+      <form method="post" action="{{ detail_url }}" data-confirm="{% if device.online %}End the session with {{ device.title }}? This removes the support app from {{ device.name }}.{% else %}End the session with {{ device.title }} and take it off the list?{% endif %}" data-busy>{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="group" value="{{ group }}"><button class="sh-btn sh-btn--danger" type="submit" data-busy-label="Ending…"><svg class="sp-icon" aria-hidden="true"><use href="#i-logout"/></svg>End session</button></form>
+    </section>
+    {% endif %}
+  </div>
+
+  {# Commands #}
+  <div class="sp-panel" role="tabpanel" id="panel-commands" aria-labelledby="tab-commands"{% if tab != 'commands' %} hidden{% endif %}>
+    <section class="sp-console" aria-label="Commands">
+      <div class="sp-console-log" id="console-log" role="log" aria-label="Command history" tabindex="0">
+        {% for run in runs %}{% include 'support/_run.html' %}{% empty %}
+        <p class="sp-console-empty" data-console-empty>Commands you run show up here with what they print. Everyone helping this computer sees the same history.</p>
+        {% endfor %}
+      </div>
+      {% if can_send %}
+      <form method="post" action="{{ detail_url }}" class="sp-console-form" id="run-form" data-busy>
+        {% csrf_token %}<input type="hidden" name="tab" value="commands"><input type="hidden" name="group" value="{{ group }}">
+        <div class="sp-console-tools">
+          {% if toolbox %}
+          <label class="sh-sr" for="saved">From the toolbox</label>
+          <select class="sh-select" id="saved" name="saved">
+            <option value="">From the toolbox…</option>
+            {% for item in toolbox %}<option value="{{ item.pk }}" data-shell="{{ item.shell }}" data-command="{{ item.command }}">{{ item.name }}{% if device.windows %} ({{ item.get_shell_display }}){% endif %}</option>{% endfor %}
+          </select>
+          {% endif %}
+          {% if shells|length > 1 %}
+          <label class="sh-sr" for="shell">Shell</label>
+          <select class="sh-select sp-shell" id="shell" name="shell">{% for value, label in shells %}<option value="{{ value }}"{% if shell == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+          {% else %}<input type="hidden" name="shell" value="{{ shells.0.0 }}"><span class="sp-shell-name">{{ shells.0.1 }}</span>{% endif %}
+          <a class="sh-btn sh-btn--ghost sh-btn--sm sp-tools-link" href="{% url 'support:toolbox' %}">Toolbox</a>
+        </div>
+        <label class="sh-sr" for="command">Command</label>
+        <textarea class="sh-textarea sp-command" id="command" name="command" rows="3" spellcheck="false" autocapitalize="off" aria-describedby="command-hint" placeholder="{% if device.windows %}Get-ComputerInfo | Select-Object OsName, OsVersion{% else %}sw_vers{% endif %}">{{ command|default:'' }}</textarea>
+        <div class="sp-run-foot">
+          <p class="sh-hint" id="command-hint">{% if device.windows %}Runs as the signed-in person, without administrator rights.{% else %}Runs as root.{% endif %} <kbd class="sh-kbd">Ctrl</kbd> <kbd class="sh-kbd">Enter</kbd> runs it.</p>
+          {% if can_save %}
+          <details class="sp-save">
+            <summary class="sh-btn sh-btn--ghost sh-btn--sm">Save to toolbox</summary>
+            <div class="sp-save-row">
+              <label class="sh-sr" for="save-name">Name for this command</label>
+              <input class="sh-input" id="save-name" name="name" maxlength="100" placeholder="Name it, like Disk space">
+              <button class="sh-btn" type="submit" name="action" value="save" data-busy-label="Saving…">Save</button>
+            </div>
+          </details>
+          {% endif %}
+          <button class="sh-btn sp-run" type="submit" name="action" value="run" data-busy-label="Running…"{% if not device.online %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-terminal"/></svg>Run</button>
+        </div>
+        <p id="save-status" class="sp-save-status" role="status"></p>
+      </form>
+      {% else %}
+      <p class="sh-hint sp-console-note">You need permission to send commands to run them here.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  {# Monitoring #}
+  <div class="sp-panel" role="tabpanel" id="panel-monitoring" aria-labelledby="tab-monitoring"{% if tab != 'monitoring' %} hidden{% endif %}>
+    <section class="sh-card">
       <header class="sh-card-head">
-        <h2 id="move-title">Move to monitoring</h2>
-        {% if agent %}<span class="sh-pill sh-pill--accent">Monitored</span>{% elif handoff %}<span class="sh-pill sh-pill--warn">Installing</span>{% endif %}
+        <h2>Move to monitoring</h2>
+        {% if device.agent %}<span class="sh-pill sh-pill--accent">Monitored</span>{% elif device.monitoring == 'stalled' %}<span class="sh-pill sh-pill--danger">No check-in</span>{% elif device.handoff %}<span class="sh-pill sh-pill--warn">Installing</span>{% endif %}
       </header>
       <div class="sh-card-pad sp-stack-gap">
-        {% if agent %}
-        <p>This computer is now monitored as <b>{{ agent.hostname }}</b> in {{ handoff.site.client.name }} / {{ handoff.site.name }}.</p>
-        <p class="sh-hint">You can keep working through the RMM agent. The support app isn’t needed any more, so remove it to end this support connection.</p>
+        {% if device.agent %}
+        <p>Now monitored as <b>{{ device.agent.hostname }}</b>{% if device.site %} in {{ device.site.client.name }} / {{ device.site.name }}{% endif %}.</p>
+        <p class="sh-hint">You can manage it from the dashboard now. {% if device.online %}End this session to remove the support app.{% else %}The support app has closed, so you can end this session.{% endif %}</p>
         <div class="sp-actions">
-          <form method="post" data-confirm="Remove the support app from {{ device.name }}? This ends the support connection.">{% csrf_token %}<input type="hidden" name="action" value="remove"><button class="sh-btn sh-btn--primary" type="submit">Remove support app</button></form>
+          <form method="post" action="{{ detail_url }}" data-confirm="{% if device.online %}End the session with {{ device.title }}? This removes the support app from {{ device.name }}.{% else %}End the session with {{ device.title }} and take it off the list?{% endif %}" data-busy>{% csrf_token %}<input type="hidden" name="action" value="remove"><input type="hidden" name="group" value="{{ group }}"><button class="sh-btn" type="submit" data-busy-label="Ending…">End session</button></form>
           <a class="sh-btn" href="{{ dashboard_url }}">Open the dashboard<svg class="sp-icon" aria-hidden="true"><use href="#i-external"/></svg></a>
         </div>
-        {% elif handoff %}
-        <div class="sp-waiting" data-refresh="15">
+        {% elif device.handoff %}
+        {% if device.monitoring == 'stalled' %}
+        <div class="sp-waiting sp-waiting--stalled">
+          <svg class="sp-icon" aria-hidden="true"><use href="#i-alert"/></svg>
+          <div><b>No agent has checked in</b><span>The install was sent at <time datetime="{{ device.handoff.requested_at|date:'c' }}" data-local>{{ device.handoff.requested_at|date:'H:i T' }}</time>{% if device.site %} for {{ device.site.client.name }} / {{ device.site.name }}{% endif %}. Check progress to see what happened, then install again.</span></div>
+        </div>
+        {% else %}
+        <div class="sp-waiting">
           <span class="sh-spinner" aria-hidden="true"></span>
-          <div><b>Installing in {{ handoff.site.client.name }} / {{ handoff.site.name }}</b><span>Sent at <time datetime="{{ handoff.requested_at|date:'c' }}" data-local>{{ handoff.requested_at|date:'H:i T' }}</time>{% if handoff.requested_by %} by {{ handoff.requested_by.username }}{% endif %}. This page checks for the agent every 15 seconds.</span></div>
+          <div><b>Installing{% if device.site %} in {{ device.site.client.name }} / {{ device.site.name }}{% endif %}</b><span>Sent at <time datetime="{{ device.handoff.requested_at|date:'c' }}" data-local>{{ device.handoff.requested_at|date:'H:i T' }}</time>{% if device.handoff.requested_by %} by {{ device.handoff.requested_by.username }}{% endif %}. This page updates when the agent checks in.</span></div>
         </div>
-        <p class="sh-hint">{% if device.windows %}They need to choose Yes on the Windows prompt, and may need an administrator password.{% else %}The install runs in the background.{% endif %} If the agent doesn’t appear within a few minutes, check the install log.</p>
-        <div class="sp-actions">
-          {% if can_send %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="shell" value="{{ shells.0.0 }}"><input type="hidden" name="command" value="{{ install_log }}"><button class="sh-btn" type="submit"{% if not device.online %} disabled{% endif %}>Show install log</button></form>{% endif %}
-        </div>
-        <details class="sp-details"><summary>Install again</summary>{% include 'support/_install_form.html' %}</details>
+        <p class="sh-hint">{% if device.windows %}They need to choose Yes on the Windows prompt, and may need an administrator password. You won’t see the prompt when you join.{% else %}The support app closes while the agent installs, so this computer shows as offline here until you end the session.{% endif %}</p>
+        {% endif %}
+        {% if can_send %}
+        <form method="post" action="{{ detail_url }}" data-busy>{% csrf_token %}<input type="hidden" name="action" value="progress"><input type="hidden" name="group" value="{{ group }}"><button class="sh-btn" type="submit" data-busy-label="Checking…"{% if not device.online %} disabled{% endif %}>Check progress</button></form>
+        {% endif %}
+        <details class="sp-details"{% if device.monitoring == 'stalled' %} open{% endif %}><summary>Install again</summary>{% include 'support/_install_form.html' %}</details>
         {% else %}
         <p class="sp-lead">Install the full RMM agent so this computer is monitored and managed from the dashboard.</p>
-        {% include 'support/_install_form.html' with primary=True %}
+        {% for a in existing %}<div class="sh-alert sh-alert--warn">An agent named <b>{{ a.hostname }}</b> is already monitored in {{ a.site.client.name }} / {{ a.site.name }}. Installing again may add a second one.</div>{% endfor %}
+        {% include 'support/_install_form.html' %}
+        {% endif %}
+        {% if progress and output is not None %}
+        <div class="sp-output"><div class="sp-output-head" role="status">Install progress{% if ran_at %} · <time datetime="{{ ran_at|date:'c' }}" data-local>{{ ran_at|date:'H:i T' }}</time>{% endif %}</div><pre>{{ output|default:'(no output)' }}</pre></div>
         {% endif %}
       </div>
     </section>
-
-    <section class="sh-card" aria-labelledby="run-title">
-      <header class="sh-card-head"><h2 id="run-title">Run a command</h2></header>
-      {% if can_send %}
-      <form method="post" class="sh-card-pad sp-form">
-        {% csrf_token %}<input type="hidden" name="action" value="run">
-        {% if shells|length > 1 %}
-        <div class="sh-field">
-          <label class="sh-label" for="shell">Shell</label>
-          <select class="sh-select" id="shell" name="shell">{% for value, label in shells %}<option value="{{ value }}"{% if shell == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-        </div>
-        {% else %}<input type="hidden" name="shell" value="{{ shells.0.0 }}">{% endif %}
-        <div class="sh-field">
-          <label class="sh-label" for="command">Command</label>
-          <textarea class="sh-textarea sp-command" id="command" name="command" rows="4" spellcheck="false" autocapitalize="off" placeholder="{% if device.windows %}Get-ComputerInfo | Select-Object OsName, OsVersion{% else %}sw_vers{% endif %}">{{ command|default:'' }}</textarea>
-          <p class="sh-hint">{% if device.windows %}Runs as the person who opened the support app, without administrator rights.{% else %}Runs as root.{% endif %} Output shows up below.</p>
-        </div>
-        <div class="sp-form-foot"><button class="sh-btn" type="submit"{% if not device.online %} disabled{% endif %}>Run command</button></div>
-      </form>
-      {% if output is not None %}
-      <div class="sp-output{% if no_reply %} sp-output--quiet{% endif %}" role="status">
-        <div class="sp-output-head">{% if no_reply %}No reply{% else %}Output{% endif %}</div>
-        <pre>{{ output|default:'(no output)' }}</pre>
-      </div>
-      {% endif %}
-      {% else %}
-      <div class="sh-card-pad"><p class="sh-hint">You need permission to send commands to run them here.</p></div>
-      {% endif %}
-    </section>
   </div>
 
-  {% if not agent %}
-  <section class="sp-end">
-    <div><h2>Done helping?</h2><p class="sh-hint">Remove the support app so this computer stops connecting to the support group.</p></div>
-    <form method="post" data-confirm="Remove the support app from {{ device.name }}? This ends the support connection.">{% csrf_token %}<input type="hidden" name="action" value="remove"><button class="sh-btn sh-btn--danger" type="submit">Remove support app</button></form>
-  </section>
-  {% endif %}
+  {# Notes #}
+  <div class="sp-panel" role="tabpanel" id="panel-notes" aria-labelledby="tab-notes"{% if tab != 'notes' %} hidden{% endif %}>
+    <form method="post" action="{{ detail_url }}" class="sh-card sh-card-pad sp-form" data-busy>
+      {% csrf_token %}<input type="hidden" name="action" value="note"><input type="hidden" name="tab" value="notes"><input type="hidden" name="group" value="{{ group }}">
+      <div class="sh-field">
+        <label class="sh-label" for="note">Add a note</label>
+        <textarea class="sh-textarea" id="note" name="note" rows="3" maxlength="4000" placeholder="What you found, what you changed, what’s left to do"></textarea>
+      </div>
+      <div class="sp-form-foot"><button class="sh-btn" type="submit" data-busy-label="Adding…">Add note</button></div>
+    </form>
+    {% if notes %}
+    <ul class="sp-notes">
+      {% for note in notes %}
+      <li><header><b>{{ note.author.username|default:'Someone' }}</b><time datetime="{{ note.created_at|date:'c' }}" data-local>{{ note.created_at|date:'M j, H:i T' }}</time></header><p>{{ note.text|linebreaksbr }}</p></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="sp-quiet-empty">No notes yet. Notes stay with this session for everyone who helps, and show up in the timeline.</p>
+    {% endif %}
+  </div>
+
+  {# Timeline #}
+  <div class="sp-panel" role="tabpanel" id="panel-timeline" aria-labelledby="tab-timeline"{% if tab != 'timeline' %} hidden{% endif %}>
+    {% include 'support/_timeline.html' %}
+  </div>
   {% elif error %}
   <div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>
   {% endif %}
-</main>
+</div>
 {% endblock %}

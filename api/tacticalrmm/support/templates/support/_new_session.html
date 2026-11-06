@@ -1,0 +1,39 @@
+<dialog class="sh-dialog sp-new-dialog" id="new-session" aria-labelledby="new-session-title"{% if show_new %} open{% endif %}>
+  <form method="post" action="{% url 'support:manage' %}" data-busy>
+    {% csrf_token %}<input type="hidden" name="action" value="create"><input type="hidden" name="group" value="{{ group }}">
+    <header class="sh-dialog-head">
+      <h2 id="new-session-title">New support session</h2>
+      <a class="sh-btn sh-btn--ghost sh-btn--icon sh-btn--sm" href="{% url 'support:manage' %}" data-close aria-label="Close" title="Close"><svg class="sp-icon" aria-hidden="true"><use href="#i-x"/></svg></a>
+    </header>
+    <div class="sh-dialog-body">
+      {% if create_form.errors %}<p class="sp-error" role="alert">Choose a site, an expiry, and a download limit from 1 to 20.</p>{% endif %}
+      <div class="sh-field">
+        <label class="sh-label" for="new-label">Session name <span class="sp-optional">Optional</span></label>
+        <input class="sh-input" id="new-label" name="label" maxlength="100" placeholder="Dana at the front desk" value="{{ create_form.label.value|default_if_none:'' }}" autocomplete="off">
+        <p class="sh-hint">Only technicians see it. Once their computer connects, the session keeps this name.</p>
+      </div>
+      <div class="sh-field">
+        <label class="sh-label" for="site">Client and site</label>
+        <select class="sh-select" id="site" name="site" required{% if create_form.site.errors %} aria-invalid="true"{% endif %}>
+          <option value="">Choose a site</option>
+          {% for site in sites %}<option value="{{ site.pk }}"{% if create_form.site.value|stringformat:'s' == site.pk|stringformat:'s' %} selected{% endif %}>{{ site.client.name }} / {{ site.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="sp-two">
+        <div class="sh-field">
+          <label class="sh-label" for="lifetime">Code expires after</label>
+          <select class="sh-select" id="lifetime" name="lifetime">{% for value, text in create_form.fields.lifetime.choices %}<option value="{{ value }}"{% if create_form.lifetime.value|stringformat:'s' == value|stringformat:'s' %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+        </div>
+        <div class="sh-field">
+          <label class="sh-label" for="max-downloads">Downloads allowed</label>
+          <input class="sh-input" id="max-downloads" name="max_downloads" type="number" min="1" max="20" value="{{ create_form.max_downloads.value|default:5 }}" required{% if create_form.max_downloads.errors %} aria-invalid="true"{% endif %}>
+        </div>
+      </div>
+      {% if not sites %}<p class="sh-hint">You need access to at least one client site to start a session.</p>{% endif %}
+    </div>
+    <footer class="sh-dialog-foot">
+      <a class="sh-btn" href="{% url 'support:manage' %}" data-close>Cancel</a>
+      <button class="sh-btn sh-btn--primary" type="submit" data-busy-label="Creating…"{% if not sites %} disabled{% endif %}><svg class="sp-icon" aria-hidden="true"><use href="#i-key"/></svg>Create session</button>
+    </footer>
+  </form>
+</dialog>

@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 
 SCRIPT_VERSION="161"
-SCRIPT_URL='https://raw.githubusercontent.com/amidaware/tacticalrmm/master/update.sh'
-LATEST_SETTINGS_URL='https://raw.githubusercontent.com/amidaware/tacticalrmm/master/api/tacticalrmm/tacticalrmm/settings.py'
+# This fork installs and updates from its own branch. Use amidaware/tacticalrmm and
+# master to follow upstream instead.
+TRMM_REPO='JustSuperHuman/tacticalrmm'
+TRMM_BRANCH='remote-support'
+
+SCRIPT_URL="https://raw.githubusercontent.com/${TRMM_REPO}/${TRMM_BRANCH}/update.sh"
+LATEST_SETTINGS_URL="https://raw.githubusercontent.com/${TRMM_REPO}/${TRMM_BRANCH}/api/tacticalrmm/tacticalrmm/settings.py"
 YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -539,11 +544,10 @@ fi
 cd /rmm
 git config user.email "admin@example.com"
 git config user.name "Bob"
-git fetch
-git checkout master
+git fetch origin "${TRMM_BRANCH}"
+git checkout "${TRMM_BRANCH}"
 git reset --hard FETCH_HEAD
 git clean -df
-git pull
 
 # update from community-scripts repo
 if [[ ! -d ${SCRIPTS_DIR} ]]; then

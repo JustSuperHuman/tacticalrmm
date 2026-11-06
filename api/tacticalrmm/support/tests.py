@@ -166,6 +166,9 @@ class PublicSupportTests(TestCase):
             self.assertEqual(b"".join(response.streaming_content), payload)
         self.code.refresh_from_db()
         self.assertEqual(self.code.download_count, 2)
+        # Kept so the computer that connects next from here joins this code's session.
+        self.assertEqual(self.code.downloaded_from, "127.0.0.1")
+        self.assertIsNotNone(self.code.downloaded_at)
         entries = AuditLog.objects.filter(message__startswith="Downloaded")
         self.assertEqual(entries.count(), 2)
         self.assertNotIn("123456789", json.dumps(list(entries.values("after_value"))))
@@ -281,7 +284,7 @@ class SupportConsoleTests(TestCase):
         response = self.client.post(
             "/support/manage/", {"action": "revoke", "invitation": code.pk}
         )
-        self.assertRedirects(response, "/support/manage/")
+        self.assertRedirects(response, f"/support/manage/codes/{code.pk}/")
         self.assertEqual(public.post("/support/download/windows/").status_code, 403)
         self.assertTrue(
             AuditLog.objects.filter(message="Revoked a support download code.").exists()
@@ -328,12 +331,42 @@ class SupportConsoleTests(TestCase):
         )
         response = self.client.get("/support/manage/")
         self.assertNotContains(response, "Other technician private name")
+        self.assertEqual(
+            self.client.get(f"/support/manage/codes/{other_code.pk}/").status_code, 404
+        )
         self.assertEqual(self.create_code().status_code, 200)
 
     def test_both_remote_and_install_permissions_are_required(self):
         role = baker.make(Role, can_use_mesh=True, can_install_agents=False)
         self.client.force_login(baker.make(User, role=role))
         self.assertEqual(self.create_code().status_code, 403)
+
+    def test_a_waiting_code_has_its_own_session_page(self):
+        code = make_invitation(self.admin, self.site, label="Front desk")
+        response = self.client.get(f"/support/manage/codes/{code.pk}/")
+        self.assertContains(response, "Waiting to connect")
+        self.assertContains(response, "that ends in <b>789</b>", html=False)
+        self.assertNotContains(response, "123 456 789")
+        self.assertEqual(
+            self.client.get("/support/manage/codes/not-a-code/").status_code, 404
+        )
+
+    @override_settings(SUPPORT_PUBLIC_URL="https://support.example.com")
+    def test_invitations_send_people_to_the_public_support_address(self):
+        response = self.create_code()
+        code = response.context["new_code"]
+        self.assertContains(
+            response,
+            f"Go to https://support.example.com and enter the code {code}.",
+        )
+        self.assertContains(response, 'href="https://support.example.com"')
+
+    def test_new_sessions_show_their_code_once_with_ways_to_send_it(self):
+        response = self.create_code()
+        self.assertContains(response, "Your session is ready")
+        self.assertContains(response, "Email invitation")
+        code = SupportAccessCode.objects.get()
+        self.assertContains(response, f'data-url="/support/manage/codes/{code.pk}/"')
 
     @override_settings(DEMO=True)
     def test_demo_does_not_issue_codes(self):
@@ -397,7 +430,7 @@ class SupportBrandingTests(TestCase):
         data.update(fields)
         if logo is not None:
             data["logo"] = logo
-        return self.client.post("/support/manage/", data)
+        return self.client.post("/support/manage/settings/", data)
 
     def test_defaults_until_branding_is_saved(self):
         self.assertEqual(self.client.get("/support/logo/").status_code, 404)
@@ -413,7 +446,7 @@ class SupportBrandingTests(TestCase):
             contact_email="help@acme.test",
             contact_phone="(555) 010-0100",
         )
-        self.assertRedirects(response, "/support/manage/?saved=branding")
+        self.assertRedirects(response, "/support/manage/settings/?saved=branding")
         public = Client()
         page = public.get("/support/")
         self.assertContains(page, "/support/logo/?v=")
@@ -462,14 +495,16 @@ class SupportBrandingTests(TestCase):
     def test_branding_needs_the_global_settings_permission(self):
         role = baker.make(Role, can_use_mesh=True, can_install_agents=True)
         self.client.force_login(baker.make(User, role=role))
-        self.assertNotContains(self.client.get("/support/manage/"), "Save branding")
+        self.assertNotContains(
+            self.client.get("/support/manage/settings/"), "Save branding"
+        )
         response = self.save(name="Not allowed")
         self.assertEqual(response.status_code, 403)
         self.assertEqual(SupportBranding.load().name, "")
         role.can_edit_core_settings = True
         role.save()
         self.assertRedirects(
-            self.save(name="Allowed"), "/support/manage/?saved=branding"
+            self.save(name="Allowed"), "/support/manage/settings/?saved=branding"
         )
 
     def test_new_codes_come_with_a_ready_to_send_invitation(self):

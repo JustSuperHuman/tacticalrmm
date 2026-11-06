@@ -1,4 +1,5 @@
 import hashlib
+import ipaddress
 import re
 import time
 from datetime import datetime, timedelta, timezone as datetime_timezone
@@ -25,12 +26,11 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from clients.models import Site
 from logs.models import AuditLog
 from tacticalrmm.constants import AuditActionType, AuditObjType
 from tacticalrmm.permissions import _has_perm
 
-from .forms import AccessCodeForm, BrandingForm, CreateAccessCodeForm
+from .forms import AccessCodeForm
 from .models import (
     SupportAccessCode,
     SupportBranding,
@@ -99,6 +99,13 @@ def _brand():
     }
 
 
+def public_url(request):
+    """Where people go for help: SUPPORT_PUBLIC_URL when the support page has its own
+    address (support.example.com), otherwise this server's own support page."""
+    configured = getattr(settings, "SUPPORT_PUBLIC_URL", "").strip()
+    return configured or request.build_absolute_uri(reverse("support:portal"))
+
+
 def _device(request):
     # Only orders the download buttons; every installer stays available.
     agent = request.headers.get("User-Agent", "")
@@ -139,6 +146,17 @@ def _context(request, **extra):
         ),
         **extra,
     }
+
+
+def client_address(value):
+    """A normalized IP address, or None. IPv4 addresses mapped into IPv6 become IPv4."""
+    try:
+        address = ipaddress.ip_address(str(value or "").strip())
+    except ValueError:
+        return None
+    if address.version == 6 and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return str(address)
 
 
 def _rate_limit(request):
@@ -295,7 +313,13 @@ def download(request, platform):
         revoked_at=None,
         expires_at__gt=timezone.now(),
         download_count__lt=F("max_downloads"),
-    ).update(download_count=F("download_count") + 1)
+    ).update(
+        download_count=F("download_count") + 1,
+        downloaded_from=client_address(
+            getattr(request, "_client_ip", "") or request.META.get("REMOTE_ADDR")
+        ),
+        downloaded_at=timezone.now(),
+    )
     if not updated:
         stream.close()
         return _portal_response(request, INVALID_CODE, 403)
@@ -304,7 +328,8 @@ def download(request, platform):
             request,
             code,
             AuditActionType.FILE_TRANSFER,
-            f"Downloaded {platform} support installer {installer.version}.",
+            f"Downloaded the {PLATFORMS[platform]['name']} support app "
+            f"(version {installer.version}).",
         )
     except Exception:
         stream.close()
@@ -377,109 +402,3 @@ def _create_code(request, sites, form):
         except IntegrityError:
             if attempt == 4:
                 raise
-
-
-@never_cache
-@csrf_protect
-@require_http_methods(["GET", "POST"])
-def manage(request):
-    context = _context(request)
-    context["dashboard_url"] = settings.CORS_ORIGIN_WHITELIST[0].rstrip("/")
-    if not _can_manage(request):
-        context["signed_in"] = request.user.is_authenticated
-        return _headers(
-            render(
-                request,
-                "support/manage.html",
-                context,
-                status=403 if context["signed_in"] else 401,
-            )
-        )
-
-    sites = Site.objects.filter_by_role(request.user).select_related("client")
-    codes = SupportAccessCode.objects.filter(site__in=sites).select_related(
-        "site__client", "created_by"
-    )
-    if not _has_perm(request, "is_superuser"):
-        codes = codes.filter(created_by=request.user)
-    can_brand = _has_perm(request, "can_edit_core_settings")
-    action = request.POST.get("action")
-    status = 200
-    if request.method == "POST":
-        if getattr(settings, "DEMO", False):
-            context["error"] = (
-                "Support codes and branding can’t be changed in the demo."
-            )
-            status = 403
-        elif action == "revoke":
-            try:
-                code = get_object_or_404(codes, pk=request.POST.get("invitation"))
-            except ValidationError:
-                raise Http404 from None
-            if not code.revoked_at:
-                code.revoked_at = timezone.now()
-                code.save(update_fields=["revoked_at"])
-                _audit(
-                    request,
-                    code,
-                    AuditActionType.MODIFY,
-                    "Revoked a support download code.",
-                )
-            return _headers(HttpResponseRedirect(reverse("support:manage")))
-        elif action == "create":
-            form = CreateAccessCodeForm(request.POST)
-            if form.is_valid():
-                raw_code, code = _create_code(request, sites, form)
-                context["new_code"] = " ".join(
-                    raw_code[i : i + 3] for i in range(0, 9, 3)
-                )
-                context["new_expiry"] = code.expires_at
-                context["new_lifetime"] = dict(form.fields["lifetime"].choices)[
-                    form.cleaned_data["lifetime"]
-                ]
-            else:
-                context["error"] = "Check the code details and try again."
-                context["create_form"] = form
-                status = 400
-        elif action == "branding":
-            if not can_brand:
-                context["error"] = (
-                    "You need permission to edit global settings to change branding."
-                )
-                status = 403
-            else:
-                form = BrandingForm(request.POST, request.FILES)
-                if form.is_valid():
-                    _save_branding(request, form)
-                    return _headers(
-                        HttpResponseRedirect(
-                            f"{reverse('support:manage')}?saved=branding"
-                        )
-                    )
-                context["branding_form"] = form
-                status = 400
-        else:
-            context["error"] = "Choose what you’d like to do."
-            status = 400
-    context.update(
-        can_manage=True,
-        can_brand=can_brand,
-        branding_saved=request.GET.get("saved") == "branding",
-        portal_url=request.build_absolute_uri(reverse("support:portal")),
-        sites=sites,
-        codes=codes[:100],
-        create_form=context.get(
-            "create_form",
-            CreateAccessCodeForm(initial={"lifetime": 30, "max_downloads": 5}),
-        ),
-    )
-    if can_brand and "branding_form" not in context:
-        saved = context["brand"]["saved"]
-        context["branding_form"] = BrandingForm(
-            initial={
-                "name": saved.name,
-                "contact_email": saved.contact_email,
-                "contact_phone": saved.contact_phone,
-            }
-        )
-    return _headers(render(request, "support/manage.html", context, status=status))

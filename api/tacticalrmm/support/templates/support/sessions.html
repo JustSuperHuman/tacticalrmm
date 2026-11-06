@@ -1,0 +1,33 @@
+{% extends 'support/host_base.html' %}
+{% block title %}{{ group_label }}{% endblock %}
+{% block crumb %}{{ group_label }}{% endblock %}
+{% block main %}
+<main id="main" class="sp-host" data-group="{{ group }}" data-list="{% url 'support:manage' %}"{% if selected %} data-selected{% endif %}>
+  {% include 'support/_session_list.html' %}
+  <section class="sp-detail" id="detail" aria-label="Selected session" data-url="{{ detail_url|default:'' }}"{% if selected %} data-for="{{ selected }}"{% endif %}>
+    {% block detail %}
+    <div class="sp-detail-inner">
+      {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
+      {% if removed == '1' %}<div class="sh-alert sh-alert--ok" role="status" data-toast>Session ended. The support app is off that computer, and it won’t connect again.</div>
+      {% elif removed == 'offline' %}<div class="sh-alert sh-alert--ok" role="status" data-toast>Session ended. That computer was offline, so if they open the support app again, it comes back under Connected.</div>{% endif %}
+      <div class="sp-detail-empty">
+        {% if rows %}
+        <span class="sp-empty-glyph" aria-hidden="true"><svg class="sp-icon"><use href="#i-sessions"/></svg></span>
+        <h2>Choose a session</h2>
+        <p>Pick one from the list to join it, run commands or move it into monitoring.</p>
+        {% else %}
+        <h2>Start your first support session</h2>
+        <ol class="sp-steps sp-steps--intro">
+          <li><span><b>Create a session</b> and send them its code.</span></li>
+          <li><span>They enter the code at <a href="{{ portal_url }}" target="_blank" rel="noopener">{{ portal_url }}</a> and open the support app.</span></li>
+          <li><span>Their computer shows up under <b>Connected</b>, ready for you to join.</span></li>
+        </ol>
+        <a class="sh-btn" href="{% url 'support:manage' %}?new=1" data-open="new-session"><svg class="sp-icon" aria-hidden="true"><use href="#i-plus"/></svg>New session</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endblock %}
+  </section>
+</main>
+{% endblock %}
+{% block dialogs %}{% include 'support/_new_session.html' %}{% endblock %}

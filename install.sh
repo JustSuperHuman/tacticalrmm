@@ -12,6 +12,11 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# This fork installs and updates from its own branch. Use amidaware/tacticalrmm and
+# master to follow upstream instead.
+TRMM_REPO='JustSuperHuman/tacticalrmm'
+TRMM_BRANCH='remote-support'
+
 SCRIPTS_DIR='/opt/trmm-community-scripts'
 PYTHON_VER='3.12.13'
 SETTINGS_FILE='/rmm/api/tacticalrmm/tacticalrmm/settings.py'
@@ -417,11 +422,11 @@ sudo mkdir /rmm
 sudo chown ${USER}:${USER} /rmm
 sudo mkdir -p /var/log/celery
 sudo chown ${USER}:${USER} /var/log/celery
-git clone https://github.com/amidaware/tacticalrmm.git /rmm/
+git clone -b "${TRMM_BRANCH}" "https://github.com/${TRMM_REPO}.git" /rmm/
 cd /rmm
 git config user.email "admin@example.com"
 git config user.name "Bob"
-git checkout master
+git checkout "${TRMM_BRANCH}"
 
 sudo mkdir -p ${SCRIPTS_DIR}
 sudo chown ${USER}:${USER} ${SCRIPTS_DIR}

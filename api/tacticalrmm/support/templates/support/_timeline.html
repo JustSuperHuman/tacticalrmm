@@ -1,0 +1,15 @@
+{% if events %}
+<ol class="sp-timeline">
+  {% for e in events %}
+  <li class="sp-event sp-event--{{ e.kind }}">
+    <span class="sp-event-icon" aria-hidden="true"><svg class="sp-icon"><use href="#i-{% if e.kind == 'connect' %}monitor{% elif e.kind == 'command' %}terminal{% elif e.kind == 'install' or e.kind == 'download' %}download{% elif e.kind == 'end' %}logout{% elif e.kind == 'note' %}note{% elif e.kind == 'online' %}connected{% else %}dot{% endif %}"/></svg></span>
+    <div class="sp-event-body">
+      <p>{% if e.who %}<b>{{ e.who }}</b> {% endif %}{% if e.kind == 'note' %}added a note: {% endif %}<span class="sp-event-text">{{ e.text }}</span></p>
+      <time datetime="{{ e.at|date:'c' }}" data-local>{{ e.at|date:'M j, H:i T' }}</time>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+<p class="sp-quiet-empty">Nothing has happened in this session yet. Joins, commands, installs and notes show up here as they happen.</p>
+{% endif %}

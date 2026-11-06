@@ -8,12 +8,14 @@ import asyncio
 import json
 import re
 import time
+from datetime import datetime, timezone
 
 import websockets
-from websockets.exceptions import WebSocketException
 from django.conf import settings
+from meshctrl.utils import get_login_token
+from websockets.exceptions import WebSocketException
 
-from core.utils import get_mesh_ws_url
+from core.utils import get_core_settings, get_mesh_ws_url
 from tacticalrmm.constants import TRMM_WS_MAX_SIZE
 
 RESPONSE_ID = "trmm-support"
@@ -21,6 +23,10 @@ RESPONSE_ID = "trmm-support"
 WINDOWS_AGENT_IDS = {1, 2, 3, 4, 42, 43}
 # runcommands types
 CMD, POWERSHELL, SHELL = 1, 2, 3
+SHELL_NAMES = {POWERSHELL: "PowerShell", CMD: "Command Prompt", SHELL: "Mac shell"}
+# MeshCentral web views for a device, and the device rights TRMM's own sync grants.
+SESSION_VIEWS = {"desktop": 11, "terminal": 12, "files": 13}
+DEVICE_RIGHTS = 4088024
 DEVICE_ID = re.compile(r"[A-Za-z0-9@$]{16,128}")
 
 
@@ -55,16 +61,20 @@ def _request(payload, wanted, timeout=15):
 
     Returns None on timeout, or straight away when `wanted` is None (send only).
     """
-    # Resolve the URL outside the event loop: it reads settings from the database.
-    uri = get_mesh_ws_url()
     try:
+        # Resolve the URL outside the event loop: it reads settings from the database.
+        uri = get_mesh_ws_url()
         return asyncio.run(_exchange(uri, payload, wanted, timeout))
     except asyncio.TimeoutError:
         return None
-    except (OSError, WebSocketException, ValueError) as exc:
+    except (OSError, WebSocketException, ValueError, KeyError, TypeError) as exc:
         raise MeshError(
-            "MeshCentral isn’t responding. Check that it’s running."
+            "MeshCentral isn’t responding. Check that it’s running and that "
+            "Tactical RMM’s MeshCentral settings are right."
         ) from exc
+    except Exception as exc:
+        # Missing or broken MeshCentral settings in the database.
+        raise MeshError("MeshCentral isn’t set up in Tactical RMM yet.") from exc
 
 
 def _action(name):
@@ -77,9 +87,16 @@ def find_group():
         raise MeshError("MeshCentral didn’t answer in time.")
     wanted = group_name()
     for mesh in reply.get("meshes", []):
-        short_id = mesh["_id"].split("/")[-1]
-        if wanted in (mesh.get("name"), short_id):
-            return {"id": mesh["_id"], "short_id": short_id, "name": mesh.get("name")}
+        mesh_id = str(mesh.get("_id", ""))
+        short_id = mesh_id.split("/")[-1]
+        if mesh_id and wanted in (mesh.get("name"), short_id):
+            return {
+                "id": mesh_id,
+                "short_id": short_id,
+                "name": mesh.get("name"),
+                # MeshCentral's user consent flags for the whole group.
+                "consent": int(mesh.get("consent") or 0),
+            }
     return None
 
 
@@ -97,15 +114,39 @@ def create_group():
     return find_group()
 
 
+def _when(milliseconds):
+    try:
+        return datetime.fromtimestamp(int(milliseconds) / 1000, timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
 def _device(node):
     agent_id = (node.get("agent") or {}).get("id", 0)
+    users = node.get("users") if isinstance(node.get("users"), list) else []
+    system = str(node.get("osdesc") or "")
+    windows = agent_id in WINDOWS_AGENT_IDS
     return {
         "id": node["_id"].split("/")[-1],
         "node_id": node["_id"],
-        "name": node.get("name") or node.get("host") or "Unnamed computer",
-        "os": node.get("osdesc") or "",
-        "windows": agent_id in WINDOWS_AGENT_IDS,
+        "name": str(node.get("name") or node.get("host") or "Unnamed computer"),
+        "os": system,
+        "windows": windows,
+        "platform": (
+            "windows"
+            if windows
+            else (
+                "macos" if re.search(r"mac ?os|os ?x|darwin", system, re.I) else "other"
+            )
+        ),
         "online": bool(node.get("conn", 0) & 1),
+        "connected_at": _when(node.get("agct")),
+        "first_seen": _when(node.get("firstconnect")),
+        # The address MeshCentral sees the computer connect from.
+        "ip": str(node.get("ip") or ""),
+        "consent": int(node.get("consent") or 0),
+        # "DESKTOP-1\dana" -> "dana": who is signed in, to tell computers apart.
+        "users": [str(u).split("\\")[-1] for u in users if u][:3],
     }
 
 
@@ -119,7 +160,9 @@ def list_devices(group, device_id=None):
     if reply.get("result"):
         raise MeshError(f"MeshCentral said: {reply['result']}")
     nodes = [node for nodes in reply.get("nodes", {}).values() for node in nodes]
-    devices = [_device(node) for node in nodes]
+    devices = [
+        _device(node) for node in nodes if isinstance(node, dict) and node.get("_id")
+    ]
     return sorted(devices, key=lambda d: (not d["online"], d["name"].lower()))
 
 
@@ -199,4 +242,47 @@ def remove_device(device):
         {"action": "removedevices", "nodeids": nodeids, "responseid": RESPONSE_ID},
         _action("removedevices"),
         timeout=10,
+    )
+
+
+def session_url(device, user, view):
+    """A one-time MeshCentral link that opens the remote desktop, terminal or files.
+
+    With MeshCentral sync on (Tactical RMM's default), technicians sign in to
+    MeshCentral as themselves, so they're given rights to this one support
+    computer first. Otherwise they use the server's account, as the dashboard does.
+    """
+    core = get_core_settings()
+    if not core.mesh_site or not core.mesh_token:
+        raise MeshError("MeshCentral isn’t set up in Tactical RMM’s settings yet.")
+    if core.sync_mesh_with_trmm:
+        mesh_user = user.mesh_user_id
+        reply = _request(
+            {"action": "users", "responseid": RESPONSE_ID}, _action("users")
+        )
+        known = {u.get("_id") for u in (reply or {}).get("users", [])}
+        if mesh_user not in known:
+            raise MeshError(
+                "Your MeshCentral account isn’t ready yet. Tactical RMM creates it "
+                "within a few minutes of getting MeshCentral access. Try again soon."
+            )
+        reply = _request(
+            {
+                "action": "adddeviceuser",
+                "nodeid": device["node_id"],
+                "userids": [mesh_user],
+                "rights": DEVICE_RIGHTS,
+                "remove": False,
+                "responseid": RESPONSE_ID,
+            },
+            _action("adddeviceuser"),
+        )
+        if reply is None or reply.get("result") not in ("ok", None):
+            raise MeshError("MeshCentral didn’t give you access to this computer.")
+    else:
+        mesh_user = f"user//{core.mesh_api_superuser}"
+    token = get_login_token(key=core.mesh_token, user=mesh_user)
+    return (
+        f"{core.mesh_site.rstrip('/')}/?login={token}&gotonode={device['node_id']}"
+        f"&viewmode={SESSION_VIEWS[view]}&hide=31"
     )

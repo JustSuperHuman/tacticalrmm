@@ -1,0 +1,20 @@
+<div class="sh-card sp-tools">
+  <header class="sh-card-head"><h3>{{ title }}</h3><span class="sh-hint">{{ items|length }} command{{ items|length|pluralize }}</span></header>
+  <ul>
+    {% for item in items %}
+    <li{% if editing.pk == item.pk %} aria-current="true"{% endif %}>
+      <div class="sp-tool">
+        <b>{{ item.name }}</b>
+        <span class="sh-pill">{{ item.get_shell_display }}</span>
+      </div>
+      <code class="sp-tool-cmd">{{ item.command }}</code>
+      {% if can_edit %}
+      <div class="sp-tool-actions">
+        <a class="sh-btn sh-btn--ghost sh-btn--sm" href="{% url 'support:toolbox' %}?edit={{ item.pk }}">Edit</a>
+        <form method="post" action="{% url 'support:toolbox' %}" data-confirm="Delete “{{ item.name }}” from the toolbox?">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ item.pk }}"><button class="sh-btn sh-btn--ghost sh-btn--sm sp-danger-text" type="submit">Delete</button></form>
+      </div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>

@@ -1,0 +1,68 @@
+{% extends 'support/host_base.html' %}
+{% block title %}Toolbox{% endblock %}
+{% block crumb %}Toolbox{% endblock %}
+{% block main %}
+<main id="main" class="sh-content sp-page">
+  <div class="sh-page-head">
+    <div>
+      <h1>Toolbox</h1>
+      <p>Commands you run often, one click away on every session’s Commands tab.</p>
+    </div>
+  </div>
+  {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
+  {% if notice %}<div class="sh-alert sh-alert--ok" role="status">{{ notice }}</div>{% endif %}
+
+  <div class="sp-grid">
+    <div class="sp-col">
+      {% if can_edit %}
+      <section class="sh-card" aria-labelledby="form-title">
+        <header class="sh-card-head"><h2 id="form-title">{% if editing %}Edit “{{ editing.name }}”{% else %}Add a command{% endif %}</h2></header>
+        <form method="post" action="{% url 'support:toolbox' %}" class="sh-card-pad sp-form">
+          {% csrf_token %}<input type="hidden" name="action" value="save">
+          {% if form.id %}<input type="hidden" name="id" value="{{ form.id }}">{% endif %}
+          <div class="sh-field">
+            <label class="sh-label" for="name">Name</label>
+            <input class="sh-input" id="name" name="name" maxlength="100" required placeholder="Disk space" value="{{ form.name|default:'' }}">
+          </div>
+          <div class="sh-field">
+            <label class="sh-label" for="shell">Runs in</label>
+            <select class="sh-select" id="shell" name="shell">{% for value, label in shells %}<option value="{{ value }}"{% if form.shell == value %} selected{% endif %}>{{ label }}{% if value == 3 %} (Mac){% else %} (Windows){% endif %}</option>{% endfor %}</select>
+          </div>
+          <div class="sh-field">
+            <label class="sh-label" for="command">Command</label>
+            <textarea class="sh-textarea sp-command" id="command" name="command" rows="7" required spellcheck="false" autocapitalize="off" placeholder="Get-PSDrive -PSProvider FileSystem">{{ form.command|default:'' }}</textarea>
+            <p class="sh-hint">On Windows, commands run as the signed-in person without administrator rights. On a Mac they run as root.</p>
+          </div>
+          <div class="sp-form-foot">
+            {% if editing %}<a class="sh-btn sh-btn--ghost" href="{% url 'support:toolbox' %}">Cancel</a>{% endif %}
+            <button class="sh-btn sh-btn--primary" type="submit">{% if editing %}Save changes{% else %}Save command{% endif %}</button>
+          </div>
+        </form>
+      </section>
+      {% else %}
+      <section class="sh-card sh-card-pad">
+        <h2>Saved commands</h2>
+        <p class="sh-hint">You can run these from any session’s Commands tab. Adding or changing them needs the Manage scripts permission.</p>
+      </section>
+      {% endif %}
+    </div>
+
+    <section class="sp-col" aria-labelledby="saved-title">
+      <div class="sp-section-head">
+        <h2 id="saved-title">In the toolbox</h2>
+        <p class="sh-hint">Everyone who uses remote support shares these commands.</p>
+      </div>
+      {% if windows or mac %}
+      {% if windows %}{% include 'support/_toolbox_list.html' with title='Windows' items=windows %}{% endif %}
+      {% if mac %}{% include 'support/_toolbox_list.html' with title='Mac' items=mac %}{% endif %}
+      {% else %}
+      <div class="sh-empty">
+        <h3>Your toolbox is empty</h3>
+        <p>Save a command here, or from any session’s Commands tab.{% if can_edit %} You can also start with a set of everyday checks, like disk space and network settings.{% endif %}</p>
+        {% if can_edit %}<form method="post" action="{% url 'support:toolbox' %}">{% csrf_token %}<input type="hidden" name="action" value="starter"><button class="sh-btn" type="submit">Add starter commands</button></form>{% endif %}
+      </div>
+      {% endif %}
+    </section>
+  </div>
+</main>
+{% endblock %}

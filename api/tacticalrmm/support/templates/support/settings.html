@@ -1,0 +1,93 @@
+{% extends 'support/host_base.html' %}
+{% block title %}Settings{% endblock %}
+{% block crumb %}Settings{% endblock %}
+{% block main %}
+<main id="main" class="sh-content sp-page">
+  <div class="sh-page-head">
+    <div>
+      <h1>Settings</h1>
+      <p>The support apps people download, the MeshCentral group their computers join, and how your support page looks.</p>
+    </div>
+  </div>
+  {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
+  {% if branding_saved %}<div class="sh-alert sh-alert--ok" role="status">Branding saved. The support page is showing it now.</div>{% endif %}
+  {% if previews_saved %}<div class="sh-alert sh-alert--ok" role="status">{% if screen_previews %}Screen previews are on. They show up in the session list within a few seconds.{% else %}Screen previews are off. No more pictures will be taken.{% endif %}</div>{% endif %}
+  {% if group_created %}<div class="sh-alert sh-alert--ok" role="status">Support group ready. Build the support apps for it next.</div>{% endif %}
+
+  <div class="sp-grid sp-grid--even">
+    <section class="sh-card" aria-labelledby="apps-title">
+      <header class="sh-card-head"><h2 id="apps-title">Support apps</h2></header>
+      <ul class="sp-apps">
+        {% for p in platforms %}
+        <li>
+          <span class="sp-tile"><svg class="sp-icon sp-icon--fill" aria-hidden="true"><use href="#i-{{ p.key }}"/></svg></span>
+          <div><b>{{ p.name }}</b><span>{% if p.installer %}Version {{ p.installer.version }}, signed by {{ p.installer.signer }}{% else %}Not published yet. The setup guide shows how to build and publish it.{% endif %}</span></div>
+          {% if p.installer %}<span class="sh-pill sh-pill--ok sh-pill--dot">Ready</span>{% else %}<span class="sh-pill sh-pill--warn">Missing</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="sh-card" aria-labelledby="group-title">
+      <header class="sh-card-head"><h2 id="group-title">Support group</h2>{% if mesh_group %}<span class="sh-pill sh-pill--ok sh-pill--dot">Ready</span>{% elif not group_error %}<span class="sh-pill sh-pill--warn">Not set up</span>{% endif %}</header>
+      <div class="sh-card-pad sp-stack-gap">
+        {% if group_error %}
+        <p class="sp-danger-text">{{ group_error }}</p>
+        {% elif mesh_group %}
+        <p class="sp-lead">Support apps connect to the MeshCentral group “{{ mesh_group.name }}”, kept apart from your monitored computers.</p>
+        <p class="sh-hint">When you build the support apps, set <code class="sp-code-inline">SUPPORT_MESH_GROUP_ID</code> to <code class="sp-code-inline">{{ mesh_group.short_id }}</code>.</p>
+        {% else %}
+        <p class="sp-lead">Support apps connect to a MeshCentral device group named “{{ group_name }}”. Create it, then build the support apps for it.</p>
+        {% if can_brand %}<form method="post" data-busy>{% csrf_token %}<input type="hidden" name="action" value="group"><button class="sh-btn" type="submit" data-busy-label="Creating the group…">Create support group</button></form>{% else %}<p class="sh-hint">Ask an administrator to create it.</p>{% endif %}
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <section class="sh-card" aria-labelledby="previews-title">
+    <header class="sh-card-head"><h2 id="previews-title">Screen previews</h2>{% if screen_previews %}<span class="sh-pill sh-pill--ok sh-pill--dot">On</span>{% else %}<span class="sh-pill sh-pill--dot">Off</span>{% endif %}</header>
+    <form method="post" class="sh-card-pad sp-stack-gap">
+      {% csrf_token %}<input type="hidden" name="action" value="previews">
+      <label class="sh-check"><input class="sh-switch" type="checkbox" name="screen_previews"{% if screen_previews %} checked{% endif %}{% if not can_brand %} disabled{% endif %}> Show a small picture of each connected computer’s screen</label>
+      <p class="sh-hint">Pictures show up in the session list and on each session’s General tab, so you can see what’s happening before you join. Each one is a single frame of the remote desktop, taken only while someone has this console open: every 20 seconds for the session you have open, and about once a minute for the rest of the list. Pictures are kept in the server’s cache for up to 10 minutes, not in the database. A Mac needs the same Screen Recording permission as joining.</p>
+      {% if previews_need_consent %}<div class="sh-alert sh-alert--warn">The support group in MeshCentral tells or asks people before every remote desktop session, so there are no previews. Each picture would show them a notice or a prompt.</div>{% endif %}
+      {% if can_brand %}<div class="sp-form-foot"><button class="sh-btn" type="submit">Save</button></div>{% else %}<p class="sh-hint">Changing this needs permission to edit global settings.</p>{% endif %}
+    </form>
+  </section>
+
+  {% if can_brand %}
+  <section class="sh-card sp-brand-card" aria-labelledby="brand-title">
+    <header class="sh-card-head"><h2 id="brand-title">Branding</h2><span class="sh-hint">Shown on the support page</span></header>
+    <form method="post" enctype="multipart/form-data" class="sh-card-pad sp-form">
+      {% csrf_token %}<input type="hidden" name="action" value="branding">
+      <div class="sp-logo-row">
+        <div class="sp-logo-preview"><img id="logo-preview" src="{{ brand.logo_url }}" alt="Current logo"></div>
+        <div class="sh-field">
+          <label class="sh-label" for="logo">Logo</label>
+          <input class="sp-file" id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" aria-describedby="logo-hint"{% if branding_form.logo.errors %} aria-invalid="true"{% endif %}>
+          {% if branding_form.logo.errors %}<p class="sp-error" role="alert">{{ branding_form.logo.errors.0 }}</p>{% endif %}
+          <p class="sh-hint" id="logo-hint">PNG, JPEG, WebP or SVG up to 512 KB. A wide logo on a transparent background works best.</p>
+          {% if brand.custom_logo %}<label class="sh-check"><input type="checkbox" name="remove_logo"> Use the default logo</label>{% endif %}
+        </div>
+      </div>
+      <div class="sp-three">
+        <div class="sh-field">
+          <label class="sh-label" for="brand-name">Company name</label>
+          <input class="sh-input" id="brand-name" name="name" maxlength="100" placeholder="{{ brand.default_name }}" value="{{ branding_form.name.value|default_if_none:'' }}">
+        </div>
+        <div class="sh-field">
+          <label class="sh-label" for="brand-phone">Help phone</label>
+          <input class="sh-input" id="brand-phone" name="contact_phone" type="tel" maxlength="40" placeholder="(555) 010-0100" value="{{ branding_form.contact_phone.value|default_if_none:'' }}">
+        </div>
+        <div class="sh-field">
+          <label class="sh-label" for="brand-email">Help email</label>
+          <input class="sh-input" id="brand-email" name="contact_email" type="email" placeholder="help@example.com" value="{{ branding_form.contact_email.value|default_if_none:'' }}"{% if branding_form.contact_email.errors %} aria-invalid="true"{% endif %}>
+          {% if branding_form.contact_email.errors %}<p class="sp-error" role="alert">Enter a full email address, like help@example.com.</p>{% endif %}
+        </div>
+      </div>
+      <div class="sp-form-foot sp-form-foot--split"><p class="sh-hint">People without a code see the phone and email so they can reach you.</p><button class="sh-btn" type="submit">Save branding</button></div>
+    </form>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

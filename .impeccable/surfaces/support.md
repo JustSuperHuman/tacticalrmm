@@ -15,22 +15,20 @@ Downloads are plain form posts, so the browser's own download UI shows progress.
 
 ## Technician console
 
-The JustUI 52px topbar (brand / Remote support, then Support page and Dashboard links), a page head, then two columns (360px and the rest), stacking below 960px:
+A host workspace in the spirit of a remote support host console, on the JustUI app shell (`.sh-app`, 244px sidebar, 52px header row).
 
-- Left: the "Your code is ready" card after creating a code (the code at 32px, "Copy code" and "Copy invitation", which copies a ready-to-send message with the page URL), then the "New code" form with the page's only primary button.
-- Right: "Recent codes" as a `.sh-table` (for, masked code, downloads, local expiry, status pill, Revoke). Below 720px the rows stack.
-- Below: "Support apps" (publishing status per platform) and "Branding" (logo upload with live preview, company name, help phone, help email), shown only to roles that can edit global settings.
-
-## Devices
-
-"Codes" and "Devices" tabs (`.sh-tabs`, `aria-current="page"`) sit under the console's page head.
-
-- **Devices list:** a `.sh-table` of computers in the MeshCentral support group: name and OS, an Online/Offline pill, and a monitoring state ("Support only", "Installing" in warn, "Monitored" in accent). Before the group exists, an empty state offers "Create support group" to admins. Admins also see the group ID to use when building the support apps.
-- **Device page:** a back link, the device name as h1 with its online pill, then two cards. "Move to monitoring" moves through three states: the install form (the page's one primary button); a warn-tinted waiting row with a spinner that re-checks every 15 seconds, plus "Show install log" and a collapsed "Install again"; and "Monitored as HOST in Client / Site" with "Remove support app" as the primary. "Run a command" has a shell picker on Windows, a mono textarea, and output in the kit's always-dark code block. A danger-tinted "Done helping?" row ends support on any computer that isn't monitored yet. Removing asks for confirmation.
+- **Sidebar:** the brand, **New session** (the shell's one primary button), the session groups as `.sh-nav-item`s with mono counts (All sessions, My sessions, Connected, Waiting to connect, Offline, Moving to monitoring, Past codes), then Manage (Toolbox, Settings) and the signed-in technician. Below 860px it's the kit's drawer, with a close button in its head.
+- **Session list** (380px, surface): a search field (`/` focuses it), then quiet rows of a 64×40 picture of the screen (the system icon on a tint when there's no picture) with a presence dot, the session name over the computer and user, and on the right how long it's been connected (ok), or Waiting/Downloaded (warn) for codes, plus a small monitoring pill. The selected row is tinted with a full accent ring, not an edge stripe. Each group has its own dashed empty state, and search has one too. "Updates on its own" with a slow ok dot sits at the foot. Every 10 seconds the list is re-fetched and swapped in place, keeping the scroll position and the search.
+- **Selected session** (scrolls on its own, `--sh-bg`): a 44px glyph, the session name as h1, a status line (Connected pill and "for 12 min") and a details line (computer · user · client). On the right are Files, Terminal and **Join**, the page's one primary button. Tabs follow: General ("Their screen", a 16:10 picture on black that joins when clicked and shows a Join chip on hover, beside a one-column facts card; then the session name and a danger-ringed "Done helping?" row), Commands (an always-dark console holding the shared history, with the input below it), Monitoring (the four-state install card), Notes, and Timeline (icon dots on a hairline). Opening a session swaps this pane in place and pushes the URL. Tabs switch without reloading.
+- **A code's session:** a key glyph and a Waiting pill, the code at 34px once with Copy code, Copy invitation and Email invitation, a green link row when a computer connects with it, "How they connect" steps with a waiting row, facts, and its timeline. Cancel code is a danger button on the right.
+- **New session:** a `.sh-dialog` with the session name, client site, expiry and download limit.
+- **Below 900px:** one pane at a time. A session shows a back link to its group, and Join takes the most width.
+- **Screen pictures** refresh in place: the browser swaps a newer one in after it has loaded, with "Updated … ago" beside it. Offline pictures go grey.
+- **Toolbox and Settings** are plain pages in the same shell. Toolbox: add/edit on the left, Windows and Mac cards on the right. Settings: Support apps and Support group side by side, Screen previews (a switch), then Branding (logo with preview, company name, help phone, help email).
 
 ## Rules
 
 - Colors come from `--sh-*` tokens only. The one literal is the white chip behind uploaded logos in dark mode.
 - App classes use the `sp-` prefix. The kit copy in `static/support/superhuman/` is never edited.
 - Times are rendered server-side and rewritten to the visitor's time zone in the browser.
-- Every state is expressed in text: invalid code, expired grant, missing installer, phone visitor, busy buttons, copy results.
+- Every state is expressed in text: invalid code, expired grant, missing installer, phone visitor, busy buttons, copy results, empty groups, no search matches, MeshCentral being down.
