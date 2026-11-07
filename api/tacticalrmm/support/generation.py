@@ -120,7 +120,7 @@ def support_windows(output, group):
     legacy = store_payload(legacy_data)
     modern = store_payload(meshapps._download(f"{base}/meshagents?id=4"))
     config = meshapps._download(
-        f"{base}/meshsettings?{urlencode({'id': group['short_id'], 'installflags': 1})}"
+        f"{base}/meshsettings?{urlencode({'id': group['short_id'], 'installflags': 0})}"
     )
     entries = dict(
         line.split("=", 1)
@@ -129,10 +129,10 @@ def support_windows(output, group):
     )
     if (
         not all(entries.get(key) for key in ("MeshID", "MeshServer", "ServerID"))
-        or entries.get("InstallFlags") != "1"
+        or entries.get("InstallFlags", "0") != "0"
     ):
         raise BuildError(
-            "MeshCentral did not return a configured run-only support client."
+            "MeshCentral did not return a configured support service client."
         )
     brand = SupportBranding.load().name or getattr(
         settings, "SUPPORT_BRAND_NAME", "JustConnect"
@@ -144,7 +144,7 @@ def support_windows(output, group):
         mesh_settings=config,
         name=f"{brand} Support",
         publisher=brand,
-        version=getattr(settings, "SUPPORT_INSTALLER_VERSION", "1.0.0"),
+        version=getattr(settings, "SUPPORT_INSTALLER_VERSION", "1.0.1"),
         cache=_cache_directory(),
     )
 
@@ -184,7 +184,7 @@ def publish(platforms=None, replace_signed=False):
                 )["macos"]
         installer = SupportInstaller(
             platform=platform,
-            version=getattr(settings, "SUPPORT_INSTALLER_VERSION", "1.0.0"),
+            version=getattr(settings, "SUPPORT_INSTALLER_VERSION", "1.0.1"),
             sha256=hashlib.sha256(data).hexdigest(),
             size=len(data),
             signer="",

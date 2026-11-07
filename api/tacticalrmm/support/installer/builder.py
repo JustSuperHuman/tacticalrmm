@@ -158,7 +158,7 @@ def _table(directory, name, columns, types, keys, rows):
     return path
 
 
-def _user_interface(directory, name, monitoring):
+def _user_interface(directory, name, monitoring, service=False):
     dialogs, controls, events = [], [], []
 
     def dialog(
@@ -284,6 +284,12 @@ def _user_interface(directory, name, monitoring):
             "Windows will ask for administrator permission. Setup chooses the right client "
             "for this computer and handles the rest."
         )
+    elif service:
+        welcome = (
+            "Install remote access for your technician. The support service stays available "
+            "after you sign out or restart, until it is removed. Only continue if you trust your technician. "
+            "Windows will ask for administrator permission. Setup chooses the right client, including Windows 7."
+        )
     else:
         welcome = (
             "Set up remote support for your Windows account. Your technician can view and "
@@ -326,7 +332,7 @@ def _user_interface(directory, name, monitoring):
         "Finish",
         "Close",
     )
-    if not monitoring:
+    if not monitoring and not service:
         controls.append(
             (
                 "Complete",
@@ -467,16 +473,16 @@ def build_msi(
     modern,
     mesh_settings=b"",
     arguments="",
-    mode="support",
+    mode="support-service",
     name="JustConnect Support",
     publisher="JustConnect",
-    version="1.0.0",
+    version="1.0.1",
     cache=None,
 ):
     legacy.validate()
     modern.validate()
     if (
-        mode not in ("support", "monitoring")
+        mode not in ("support", "support-service", "monitoring")
         or len(mesh_settings) > 64 * 1024
         or len(arguments) > 4096
     ):
@@ -496,6 +502,27 @@ def build_msi(
     cache = Path(cache) if cache else destination.parent / "build-cache"
     dll = native_actions(cache)
     monitoring = mode == "monitoring"
+    service = mode == "support-service"
+    machine = monitoring or service
+    registry_mode = "monitoring" if monitoring else "support"
+    if service:
+        # Ignore server-wide agent naming overrides. This MSI owns a separate
+        # service and folder, and must coexist with Access's Mesh Agent service.
+        entries = dict(
+            line.split("=", 1)
+            for line in mesh_settings.decode("utf-8-sig").splitlines()
+            if "=" in line
+        )
+        if not all(entries.get(key) for key in ("MeshID", "MeshServer", "ServerID")):
+            raise BuildError("The support service needs its MeshCentral configuration.")
+        for key in ("fileName", "installPath", "companyName"):
+            entries.pop(key, None)
+        entries.update(
+            InstallFlags="0", meshServiceName="JustConnect Support", displayName=name
+        )
+        mesh_settings = (
+            "\n".join(f"{key}={value}" for key, value in entries.items()) + "\n"
+        ).encode()
     ET.register_namespace("", NAMESPACE)
 
     def element(parent, tag, **attributes):
@@ -515,7 +542,11 @@ def build_msi(
             UpgradeCode=(
                 "2D65D370-D538-4074-B9C0-99D74831D112"
                 if monitoring
-                else "2F861486-F597-47D8-9EB7-C55F62548EA8"
+                else (
+                    "07809887-591C-45A1-B033-9CB310EA242E"
+                    if service
+                    else "2F861486-F597-47D8-9EB7-C55F62548EA8"
+                )
             ),
         )
         element(
@@ -524,7 +555,7 @@ def build_msi(
             Id="*",
             InstallerVersion="500",
             Compressed="yes",
-            InstallScope="perMachine" if monitoring else "perUser",
+            InstallScope="perMachine" if machine else "perUser",
             Description=f"{name} installer",
         )
         element(
@@ -558,13 +589,16 @@ def build_msi(
         )
         condition.text = "Installed OR VersionNT > 601 OR (VersionNT = 601 AND ServicePackLevel >= 1)"
         target = element(product, "Directory", Id="TARGETDIR", Name="SourceDir")
-        if monitoring:
+        if machine:
             volume = element(target, "Directory", Id="WindowsVolume")
             parent = element(
                 volume, "Directory", Id="ProgramFilesRoot", Name="Program Files"
             )
             folder = element(
-                parent, "Directory", Id="SupportInstallDir", Name="TacticalAgent"
+                parent,
+                "Directory",
+                Id="SupportInstallDir",
+                Name="TacticalAgent" if monitoring else "JustConnectSupport",
             )
         else:
             parent = element(target, "Directory", Id="LocalAppDataFolder")
@@ -578,8 +612,8 @@ def build_msi(
         element(
             component,
             "RegistryValue",
-            Root="HKLM" if monitoring else "HKCU",
-            Key=f"Software\\JustConnect\\{mode}",
+            Root="HKLM" if machine else "HKCU",
+            Key=f"Software\\JustConnect\\{registry_mode}",
             Name="InstallDir",
             Value="[SupportInstallDir]",
             Type="string",
@@ -588,8 +622,8 @@ def build_msi(
         element(
             component,
             "RegistryValue",
-            Root="HKLM" if monitoring else "HKCU",
-            Key=f"Software\\JustConnect\\{mode}",
+            Root="HKLM" if machine else "HKCU",
+            Key=f"Software\\JustConnect\\{registry_mode}",
             Name="ProductCode",
             Value="[ProductCode]",
             Type="string",
@@ -623,7 +657,7 @@ def build_msi(
                 "Component",
                 Id="Configuration",
                 Guid=str(
-                    uuid.uuid5(uuid.NAMESPACE_URL, "justconnect/support/configuration")
+                    uuid.uuid5(uuid.NAMESPACE_URL, f"justconnect/{mode}/configuration")
                 ),
             )
             element(
@@ -635,6 +669,7 @@ def build_msi(
                 KeyPath="yes",
             )
             element(feature, "ComponentRef", Id="Configuration")
+        if not monitoring and not service:
             menu = element(target, "Directory", Id="ProgramMenuFolder")
             menu_folder = element(
                 menu, "Directory", Id="SupportMenu", Name="JustConnect"
@@ -678,7 +713,7 @@ def build_msi(
                 DllEntry=action_name,
                 Execute=execute,
                 Return=result,
-                Impersonate="no" if monitoring and execute != "immediate" else "yes",
+                Impersonate="no" if machine and execute != "immediate" else "yes",
             )
         sequence = element(product, "InstallExecuteSequence")
         for action_name, after, condition_text in (
@@ -730,15 +765,19 @@ def build_msi(
                         "MeshAgent.exe",
                         "client.download",
                         "client.previous",
+                        "client.replaced",
                         "settings.previous",
+                        "service.previous",
+                        "identity.previous",
                         "setup.pending",
+                        "MeshAgent.msh",
                     )
                 )
             ]
             + [("RemoveInstallFolder", "Installation", None, "SupportInstallDir", 2)]
             + (
                 []
-                if monitoring
+                if monitoring or service
                 else [("RemoveMenu", "Shortcuts", None, "SupportMenu", 2)]
             ),
         )
@@ -755,7 +794,7 @@ def build_msi(
             flags = (
                 1
                 + execute
-                + (2048 if monitoring and execute else 0)
+                + (2048 if machine and execute else 0)
                 + (8192 if execute else 0)
             )
             if action_name in ("RollbackClient", "CommitClient"):
@@ -768,7 +807,7 @@ def build_msi(
                     f"UPDATE `CustomAction` SET `Type` = {flags} WHERE `Action` = '{action_name}'",
                 ]
             )
-        for table in _user_interface(directory, name, monitoring):
+        for table in _user_interface(directory, name, monitoring, service):
             _run(["msibuild", str(package), "-i", str(table)])
         for dialog, condition_text, order in (
             ("Welcome", "NOT Installed", 1290),

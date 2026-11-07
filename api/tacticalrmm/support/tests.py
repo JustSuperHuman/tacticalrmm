@@ -582,7 +582,8 @@ class PublishSupportTests(TestCase):
             "support.management.commands.publish_support_installers.msi_properties",
             return_value={
                 "GeneratedInstaller": "1",
-                "PackageMode": "support",
+                "PackageMode": "support-service",
+                "ALLUSERS": "1",
                 "LegacySha256": self.payload_digest,
                 "ModernSha256": self.payload_digest,
             },

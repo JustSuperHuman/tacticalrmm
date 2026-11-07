@@ -132,7 +132,8 @@ def validate_bundle(directory, allow_unsigned=False):
                 properties = msi_properties(path)
                 if (
                     properties.get("GeneratedInstaller") != "1"
-                    or properties.get("PackageMode") != "support"
+                    or properties.get("PackageMode") != "support-service"
+                    or properties.get("ALLUSERS") != "1"
                 ):
                     raise ValueError(
                         "The Windows package is not a generated support MSI"

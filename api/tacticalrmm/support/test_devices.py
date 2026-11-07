@@ -121,7 +121,7 @@ class MeshHelperTests(TestCase):
                 mesh.find_group()
 
     @patch("support.mesh.time.sleep")
-    def test_removal_stops_run_only_agents_before_dropping_them(self, _):
+    def test_windows_removal_uses_msi_before_dropping_the_device(self, _):
         sent = []
 
         def fake_request(payload, wanted, timeout=15):
@@ -134,10 +134,12 @@ class MeshHelperTests(TestCase):
             mesh.remove_device(WINDOWS_PC)
         self.assertEqual(
             [p["action"] for p in sent],
-            ["uninstallagent", "runcommands", "removedevices"],
+            ["runcommands", "removedevices"],
         )
-        self.assertEqual(sent[1]["cmds"], mesh.STOP_WINDOWS)
-        self.assertEqual(sent[1]["type"], mesh.POWERSHELL)
+        self.assertEqual(sent[0]["cmds"], mesh.STOP_WINDOWS)
+        self.assertEqual(sent[0]["type"], mesh.POWERSHELL)
+        self.assertIn("HKLM:", mesh.STOP_WINDOWS)
+        self.assertIn("WOW6432Node", mesh.STOP_WINDOWS)
 
         def disconnected(payload, wanted, timeout=15):
             if payload["action"] == "runcommands":

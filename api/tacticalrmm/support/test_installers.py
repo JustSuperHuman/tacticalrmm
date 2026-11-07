@@ -193,12 +193,39 @@ class NativePackageIntegrationTests(TestCase):
             self.root / "support.msi",
             legacy=client,
             modern=client,
-            mesh_settings=b"MeshID=test\nInstallFlags=1\n",
+            mesh_settings=b"MeshID=test\nServerID=test\nMeshServer=wss://mesh.example.com/agent.ashx\nInstallFlags=0\nfileName=OtherAgent\nmeshServiceName=Mesh Agent\n",
         )
         self.assertEqual(path.read_bytes()[:8], MSI_MAGIC)
         properties = msi_properties(path)
         self.assertEqual(properties["GeneratedInstaller"], "1")
         self.assertEqual(properties["LegacySha256"], client.sha256)
+        self.assertEqual(properties["ALLUSERS"], "1")
+        self.assertEqual(properties["PackageMode"], "support-service")
+        actions = subprocess.check_output(
+            ["msiinfo", "export", str(path), "CustomAction"], text=True
+        )
+        install = next(
+            line.split("\t")
+            for line in actions.splitlines()
+            if line.startswith("InstallClient\t")
+        )
+        self.assertTrue(int(install[1]) & 2048)
+        controls = subprocess.check_output(
+            ["msiinfo", "export", str(path), "Control"], text=True
+        )
+        self.assertNotIn("Open the support app", controls)
+        self.assertIn("after you sign out or restart", controls)
+        extracted = self.root / "unpacked"
+        subprocess.run(
+            ["msiextract", "-C", str(extracted), str(path)],
+            check=True,
+            capture_output=True,
+        )
+        config = next(extracted.rglob("MeshAgent.msh")).read_text()
+        self.assertIn("InstallFlags=0", config)
+        self.assertIn("meshServiceName=JustConnect Support", config)
+        self.assertNotIn("meshServiceName=Mesh Agent", config)
+        self.assertNotIn("fileName=", config)
         sequence = subprocess.check_output(
             ["msiinfo", "export", str(path), "InstallExecuteSequence"], text=True
         )

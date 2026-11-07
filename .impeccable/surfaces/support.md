@@ -13,6 +13,8 @@ The one moment of motion: the download step rises 6px and fades in, and the chec
 
 Downloads are plain form posts, so the browser's own download UI shows progress. The button is disabled for 5 seconds after a click because every click counts toward the code's download limit.
 
+The Windows MSI installs the JustConnect Support service with administrator permission. Its instructions explain that remote access remains available after sign-out and restart until removal. Finish does not launch an agent window. The native wizard states the same persistence before Install, and setup verifies service startup. This provides remote access without installing monitoring.
+
 ## Technician console
 
 A host workspace in the spirit of a remote support host console, on the JustUI app shell (`.sh-app`, 244px sidebar, 52px header row).

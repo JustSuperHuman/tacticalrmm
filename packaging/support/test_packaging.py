@@ -47,14 +47,14 @@ class FetchTests(unittest.TestCase):
 
     @patch("fetch_installer.requests.get")
     def test_windows_configuration_is_kept_outside_the_signable_binary(self, get):
-        config = b"MeshID=0x123\nServerID=456\nMeshServer=wss://mesh.example.com/agent.ashx\nInstallFlags=1\n"
+        config = b"MeshID=0x123\nServerID=456\nMeshServer=wss://mesh.example.com/agent.ashx\nInstallFlags=0\n"
         get.side_effect = [Response(b"MZsynthetic-agent"), Response(config)]
         path = Path(self.temporary.name) / "MeshAgent.exe"
         fetch("windows", path)
         self.assertEqual(path.read_bytes(), b"MZsynthetic-agent")
         self.assertEqual(path.with_suffix(".msh").read_bytes(), config)
         self.assertNotIn("meshid", get.call_args_list[0].kwargs["params"])
-        self.assertEqual(get.call_args_list[1].kwargs["params"]["installflags"], 1)
+        self.assertEqual(get.call_args_list[1].kwargs["params"]["installflags"], 0)
         self.assertFalse(get.call_args_list[0].kwargs["allow_redirects"])
 
     @patch("fetch_installer.requests.get")
@@ -71,13 +71,21 @@ class FetchTests(unittest.TestCase):
         self.assertEqual(get.call_args.kwargs["params"]["installflags"], 0)
 
     @patch("fetch_installer.requests.get")
-    def test_windows7_uses_x86_and_keeps_run_only_enrollment_after_signing(self, get):
-        config = b"MeshID=0x123\nServerID=456\nMeshServer=wss://mesh.example.com/agent.ashx\nInstallFlags=1\n"
+    def test_windows7_uses_x86_and_keeps_service_enrollment_after_signing(self, get):
+        config = b"MeshID=0x123\nServerID=456\nMeshServer=wss://mesh.example.com/agent.ashx\nInstallFlags=0\n"
         get.side_effect = [Response(b"MZsynthetic-x86-agent"), Response(config)]
         path = Path(self.temporary.name) / "MeshAgent.exe"
         fetch("windows7", path)
         self.assertEqual(get.call_args_list[0].kwargs["params"]["id"], 3)
         self.assertNotIn("meshid", get.call_args_list[0].kwargs["params"])
+        self.assertEqual(path.with_suffix(".msh").read_bytes(), config)
+
+    @patch("fetch_installer.requests.get")
+    def test_default_service_configuration_may_omit_zero_install_flags(self, get):
+        config = b"MeshID=0x123\nServerID=456\nMeshServer=wss://mesh.example.com/agent.ashx\n"
+        get.side_effect = [Response(b"MZsynthetic-x86-agent"), Response(config)]
+        path = Path(self.temporary.name) / "MeshAgent.exe"
+        fetch("windows7", path)
         self.assertEqual(path.with_suffix(".msh").read_bytes(), config)
 
     @patch("fetch_installer.requests.get")
@@ -92,7 +100,7 @@ class FetchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Windows executable"):
             fetch("windows", Path(self.temporary.name) / "tool.exe")
         get.side_effect = [Response(b"MZagent"), Response(b"MeshID=only-one-field\n")]
-        with self.assertRaisesRegex(ValueError, "configured run-only"):
+        with self.assertRaisesRegex(ValueError, "configured support service"):
             fetch("windows", Path(self.temporary.name) / "tool.exe")
 
     @patch("fetch_installer.requests.get")

@@ -40,8 +40,8 @@
           <h2>After it downloads</h2>
           <ol class="sp-steps" data-steps="windows"{% if device == 'macos' %} hidden{% endif %}>
             <li><span>Open the <b>MSI installer</b> in your Downloads folder.</span></li>
-            <li><span>Choose <b>Install</b>. Setup downloads the right client for your computer, including Windows 7.</span></li>
-            <li><span>Choose <b>Finish</b> to open the app, then <b>Connect</b> if you see that button. Leave it open for your technician.</span></li>
+            <li><span>Choose <b>Install</b> and approve the administrator prompt. Setup downloads the right client, including Windows 7.</span></li>
+            <li><span>Choose <b>Finish</b>. Remote access stays available after sign-out and restart, until you or your technician removes the app.</span></li>
           </ol>
           <ol class="sp-steps" data-steps="macos"{% if device != 'macos' %} hidden{% endif %}>
             <li><span>Open the file you just downloaded and follow the installer.{% if mac_unsigned %} If your Mac says it can’t be opened, go to <b>System Settings</b>, then <b>Privacy &amp; Security</b>, and choose <b>Open Anyway</b>.{% endif %}</span></li>

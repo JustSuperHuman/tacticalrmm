@@ -95,7 +95,7 @@ static wstring utf8(const std::vector<BYTE>& bytes) {
 }
 struct Configuration {
     wstring mode, directory, url, digest, settings, arguments;
-    bool repair;
+    bool repair, upgrading;
     explicit Configuration(MSIHANDLE session) {
         wstring value = property(session, L"CustomActionData");
         std::vector<wstring> fields;
@@ -105,17 +105,20 @@ struct Configuration {
                 fields.push_back(value.substr(start, i - start)); start = i + 1;
             }
         }
-        require(fields.size() == 7, L"Download a new copy of this installer from your technician.");
+        require(fields.size() == 7 || fields.size() == 8, L"Download a new copy of this installer from your technician.");
         mode = fields[0]; directory = fields[1]; url = fields[2]; digest = fields[3];
         settings = fields[4]; arguments = fields[5]; repair = fields[6] == L"1";
-        require(mode == L"support" || mode == L"monitoring", L"Invalid installer type.");
+        upgrading = fields.size() == 8 && fields[7] == L"1";
+        require(mode == L"support" || mode == L"support-service" || mode == L"monitoring", L"Invalid installer type.");
         require(directory.size() > 8 && directory.size() < MAX_PATH - 60,
                 L"The installation folder is not available.");
         if (directory.back() != L'\\') directory += L'\\';
         // Every file operation below names a product file; there is no recursive deletion.
     }
     wstring file(const wchar_t* name) const { return directory + name; }
-    wstring agent() const { return file(mode == L"support" ? L"MeshAgent.exe" : L"tacticalrmm.exe"); }
+    bool support() const { return mode != L"monitoring"; }
+    bool service() const { return mode == L"support-service"; }
+    wstring agent() const { return file(support() ? L"MeshAgent.exe" : L"tacticalrmm.exe"); }
 };
 static bool exists(const wstring& path) {
     return GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES;
@@ -152,6 +155,97 @@ static bool service_exists() {
     if (service) CloseServiceHandle(service);
     CloseServiceHandle(manager);
     return present;
+}
+struct ServiceHandle {
+    SC_HANDLE value;
+    explicit ServiceHandle(SC_HANDLE handle) : value(handle) {}
+    ~ServiceHandle() { if (value) CloseServiceHandle(value); }
+    operator SC_HANDLE() const { return value; }
+};
+static const wchar_t* SupportService = L"JustConnect Support";
+// A matching name alone is not ownership. Never stop, replace or remove another
+// product's service, including Tactical RMM's default "Mesh Agent" service.
+static SC_HANDLE support_service(const Configuration& config, DWORD access) {
+    ServiceHandle manager(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CONNECT));
+    require(manager.value != nullptr, L"Windows could not open its service manager. Run setup as an administrator.");
+    SC_HANDLE service = OpenServiceW(manager, SupportService, access | SERVICE_QUERY_CONFIG | SERVICE_QUERY_STATUS);
+    if (!service) {
+        require(GetLastError() == ERROR_SERVICE_DOES_NOT_EXIST,
+                L"Windows could not access the support service. Run setup as an administrator.");
+        return nullptr;
+    }
+    DWORD bytes = 0;
+    QueryServiceConfigW(service, nullptr, 0, &bytes);
+    std::vector<BYTE> buffer(bytes);
+    auto details = reinterpret_cast<QUERY_SERVICE_CONFIGW*>(buffer.data());
+    bool valid = bytes && QueryServiceConfigW(service, details, bytes, &bytes);
+    wstring expected = L"\"" + config.agent() + L"\"";
+    if (valid) {
+        wstring command = details->lpBinaryPathName;
+        valid = (details->dwServiceType & ~SERVICE_INTERACTIVE_PROCESS) == SERVICE_WIN32_OWN_PROCESS &&
+            ((command.size() >= expected.size() && _wcsnicmp(command.c_str(), expected.c_str(), expected.size()) == 0 &&
+              (command.size() == expected.size() || command[expected.size()] == L' ')) ||
+             lstrcmpiW(command.c_str(), config.agent().c_str()) == 0);
+    }
+    if (!valid) {
+        CloseServiceHandle(service);
+        throw Failure{L"Another installation already uses the support service name. Ask your technician to check it before continuing."};
+    }
+    return service;
+}
+static void support_stop(const Configuration& config, bool remove = false) {
+    ServiceHandle service(support_service(config, SERVICE_STOP | (remove ? DELETE : 0)));
+    if (!service.value) return;
+    SERVICE_STATUS state = {};
+    require(QueryServiceStatus(service, &state) != FALSE, L"Windows could not check the support service.");
+    if (state.dwCurrentState != SERVICE_STOPPED) {
+        if (state.dwCurrentState != SERVICE_STOP_PENDING)
+            require(ControlService(service, SERVICE_CONTROL_STOP, &state) || GetLastError() == ERROR_SERVICE_NOT_ACTIVE,
+                    L"The support service could not stop. Restart this computer and run setup again.");
+        for (int i = 0; i < 300; ++i) {
+            require(QueryServiceStatus(service, &state) != FALSE, L"Windows could not check the support service.");
+            if (state.dwCurrentState == SERVICE_STOPPED) break;
+            Sleep(100);
+        }
+        require(state.dwCurrentState == SERVICE_STOPPED, L"The support service is still stopping. Restart this computer and run setup again.");
+    }
+    if (remove) require(DeleteService(service) != FALSE, L"Windows could not remove the support service. Run setup again.");
+}
+static void support_create(const Configuration& config) {
+    ServiceHandle manager(OpenSCManagerW(nullptr, nullptr, SC_MANAGER_CREATE_SERVICE));
+    require(manager.value != nullptr, L"Windows could not create the support service. Run setup as an administrator.");
+    wstring command = L"\"" + config.agent() + L"\" --meshServiceName=\"JustConnect Support\" --readmsh=1";
+    ServiceHandle service(CreateServiceW(manager, SupportService, SupportService, SERVICE_CHANGE_CONFIG,
+            SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START, SERVICE_ERROR_NORMAL, command.c_str(),
+            nullptr, nullptr, nullptr, nullptr, nullptr));
+    require(service.value != nullptr, L"The support service could not be installed. Contact your technician.");
+    SERVICE_DESCRIPTIONW description = {const_cast<LPWSTR>(L"Remote access installed by your technician. Remove JustConnect Support in Programs and Features to disconnect.")};
+    ChangeServiceConfig2W(service, SERVICE_CONFIG_DESCRIPTION, &description);
+    SC_ACTION retries[] = {{SC_ACTION_RESTART, 10000}, {SC_ACTION_RESTART, 30000}, {SC_ACTION_NONE, 0}};
+    SERVICE_FAILURE_ACTIONSW recovery = {86400, nullptr, nullptr, 3, retries};
+    ChangeServiceConfig2W(service, SERVICE_CONFIG_FAILURE_ACTIONS, &recovery);
+}
+static void support_start(MSIHANDLE session, const Configuration& config) {
+    ServiceHandle service(support_service(config, SERVICE_START | SERVICE_CHANGE_CONFIG));
+    require(service.value != nullptr, L"The support service was not installed. Contact your technician.");
+    require(ChangeServiceConfigW(service, SERVICE_WIN32_OWN_PROCESS, SERVICE_AUTO_START, SERVICE_NO_CHANGE,
+            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) != FALSE,
+            L"Windows could not enable the support service to start after a restart.");
+    SERVICE_STATUS state = {};
+    require(QueryServiceStatus(service, &state) != FALSE, L"Windows could not check the support service.");
+    if (state.dwCurrentState != SERVICE_RUNNING && state.dwCurrentState != SERVICE_START_PENDING)
+        require(StartServiceW(service, 0, nullptr) || GetLastError() == ERROR_SERVICE_ALREADY_RUNNING,
+                L"The support service could not start. Contact your technician.");
+    int stable = 0;
+    for (int i = 0; i < 300; ++i) {
+        require(QueryServiceStatus(service, &state) != FALSE, L"Windows could not check the support service.");
+        if (state.dwCurrentState == SERVICE_RUNNING) {
+            if (++stable >= 20) return;
+        } else stable = 0;
+        if (state.dwCurrentState == SERVICE_STOPPED) break;
+        progress(session, 2, 0); Sleep(100);
+    }
+    throw Failure{L"The support service did not stay running. Contact your technician."};
 }
 static bool enrolled() {
     for (REGSAM view : {KEY_WOW64_32KEY, KEY_WOW64_64KEY}) {
@@ -328,7 +422,8 @@ extern "C" __declspec(dllexport) UINT __stdcall PrepareInstall(MSIHANDLE session
             property(session, legacy ? L"LegacyUrl" : L"ModernUrl") + L"|" +
             property(session, legacy ? L"LegacySha256" : L"ModernSha256") + L"|" +
             property(session, L"MeshSettingsHex") + L"|" + property(session, L"InstallArgumentsHex") +
-            L"|" + (property(session, L"Installed").empty() ? L"0" : L"1");
+            L"|" + (property(session, L"Installed").empty() ? L"0" : L"1") +
+            L"|" + (property(session, L"UPGRADINGPRODUCTCODE").empty() ? L"0" : L"1");
         for (auto name : {L"InstallClient", L"RollbackClient", L"CommitClient", L"UninstallClient", L"StopClient", L"LaunchClient"})
             require(MsiSetPropertyW(session, name, data.c_str()) == ERROR_SUCCESS, L"Setup could not prepare its configuration.");
     });
@@ -343,15 +438,38 @@ extern "C" __declspec(dllexport) UINT __stdcall InstallClient(MSIHANDLE session)
     return action(session, [&] {
         Configuration config(session);
         if (config.mode == L"monitoring" && config.repair && exists(config.agent()) && service_exists()) return;
+        bool existing_service = false;
+        if (config.service()) {
+            ServiceHandle service(support_service(config, 0));
+            existing_service = service.value != nullptr;
+        }
         status(session, L"Downloading the right client for this computer…");
         wstring pending = config.file(L"client.download");
         try { download(session, config.url, pending, config.digest); }
         catch (...) { DeleteFileW(pending.c_str()); throw; }
-        // Preserve existing files until Windows Installer commits the transaction.
-        if (config.mode == L"support" && exists(config.agent())) require(MoveFileExW(config.agent().c_str(), config.file(L"client.previous").c_str(), MOVEFILE_REPLACE_EXISTING), L"Close the support app and try setup again.");
+        // Stop a service only after the verified download succeeds. Record its
+        // previous existence so rollback can restore a repair without deleting it.
+        if (config.service()) {
+            if (existing_service) write_file(config.file(L"service.previous"), {});
+            if (exists(config.file(L"MeshAgent.db"))) write_file(config.file(L"identity.previous"), {});
+        }
         write_file(config.file(L"setup.pending"), {});
-        if (config.mode == L"support") {
+        if (config.service()) {
+            support_stop(config);
+        }
+        // Preserve existing files until Windows Installer commits the transaction.
+        if (config.support() && exists(config.agent())) require(MoveFileExW(config.agent().c_str(), config.file(L"client.previous").c_str(), MOVEFILE_REPLACE_EXISTING), L"Close the support app and try setup again.");
+        if (config.support()) {
             require(MoveFileExW(pending.c_str(), config.agent().c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH), L"Setup could not put the client in its installation folder.");
+            write_file(config.file(L"client.replaced"), {});
+            if (config.service()) {
+                status(session, L"Installing the remote support service…");
+                // Register in place through Windows 7's native service API. The
+                // MSI owns the files, registry and uninstall entry; -fullinstall
+                // would create a second installation outside that transaction.
+                if (!existing_service) support_create(config);
+                support_start(session, config);
+            }
         } else {
             wstring setup = config.file(L"client-setup.exe");
             require(MoveFileExW(pending.c_str(), setup.c_str(), MOVEFILE_REPLACE_EXISTING), L"Setup could not prepare the monitoring client.");
@@ -387,24 +505,44 @@ extern "C" __declspec(dllexport) UINT __stdcall RollbackClient(MSIHANDLE session
         Configuration config(session);
         if (exists(config.file(L"setup.pending"))) {
             if (config.mode == L"monitoring" && !config.repair) cleanup_monitoring(session, config);
-            DeleteFileW(config.agent().c_str());
+            if (config.service()) {
+                support_stop(config, !exists(config.file(L"service.previous")));
+                if (!exists(config.file(L"identity.previous"))) {
+                    DeleteFileW(config.file(L"MeshAgent.db").c_str());
+                    DeleteFileW(config.file(L"MeshAgent.log").c_str());
+                }
+            }
+            // A failure before replacement must not delete the existing binary.
+            if (config.mode == L"monitoring" || exists(config.file(L"client.previous")) ||
+                exists(config.file(L"client.replaced"))) DeleteFileW(config.agent().c_str());
         }
         if (exists(config.file(L"client.previous"))) MoveFileExW(config.file(L"client.previous").c_str(), config.agent().c_str(), MOVEFILE_REPLACE_EXISTING);
+        if (config.service() && exists(config.file(L"service.previous"))) support_start(session, config);
         DeleteFileW(config.file(L"client.download").c_str());
         DeleteFileW(config.file(L"setup.pending").c_str());
+        DeleteFileW(config.file(L"service.previous").c_str());
+        DeleteFileW(config.file(L"client.replaced").c_str());
+        DeleteFileW(config.file(L"identity.previous").c_str());
     });
 }
 extern "C" __declspec(dllexport) UINT __stdcall CommitClient(MSIHANDLE session) {
     return action(session, [&] {
         Configuration config(session);
-        for (auto name : {L"client.previous", L"settings.previous", L"setup.pending", L"client.download", L"client-setup.exe"}) DeleteFileW(config.file(name).c_str());
+        for (auto name : {L"client.previous", L"client.replaced", L"settings.previous", L"service.previous", L"identity.previous", L"setup.pending", L"client.download", L"client-setup.exe"}) DeleteFileW(config.file(name).c_str());
     });
 }
 extern "C" __declspec(dllexport) UINT __stdcall UninstallClient(MSIHANDLE session) {
     return action(session, [&] {
         Configuration config(session);
         if (config.mode == L"monitoring") cleanup_monitoring(session, config);
-        else stop_process(config.agent());
+        else {
+            if (config.service()) support_stop(config, true);
+            stop_process(config.agent());
+            if (config.service() && !config.upgrading) {
+                DeleteFileW(config.file(L"MeshAgent.db").c_str());
+                DeleteFileW(config.file(L"MeshAgent.log").c_str());
+            }
+        }
     });
 }
 extern "C" __declspec(dllexport) UINT __stdcall LaunchClient(MSIHANDLE session) {

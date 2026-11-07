@@ -212,9 +212,16 @@ STOP_UNIX = 'p=$PPID; nohup sh -c "sleep 1; kill $p" >/dev/null 2>&1 & echo Stop
 # and can run the support app's own uninstaller once the files are no longer in use.
 STOP_WINDOWS = r"""
 $agent = (Get-WmiObject Win32_Process -Filter "ProcessId=$PID").ParentProcessId
-$product = (Get-ItemProperty -LiteralPath 'HKCU:\Software\JustConnect\support' -ErrorAction SilentlyContinue).ProductCode
-$steps = "Start-Sleep -Seconds 1; Stop-Process -Id $agent -Force -ErrorAction SilentlyContinue"
-if ($product -match '^\{[A-Fa-f0-9-]{36}\}$') { $steps += "; Start-Process msiexec.exe -WindowStyle Hidden -ArgumentList '/x $product /qn /norestart'" }
+$product = $null
+foreach ($key in @('HKLM:\Software\JustConnect\support', 'HKLM:\Software\WOW6432Node\JustConnect\support', 'HKCU:\Software\JustConnect\support')) {
+    $value = (Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue).ProductCode
+    if ($value -match '^\{[A-Fa-f0-9-]{36}\}$') { $product = $value; break }
+}
+if ($product) {
+    $steps = "Start-Sleep -Seconds 1; Start-Process msiexec.exe -WindowStyle Hidden -ArgumentList '/x $product /qn /norestart'"
+} else {
+    $steps = "Start-Sleep -Seconds 1; Stop-Process -Id $agent -Force -ErrorAction SilentlyContinue"
+}
 $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($steps))
 $startup = ([wmiclass]'Win32_ProcessStartup').CreateInstance()
 $startup.ShowWindow = 0
@@ -226,14 +233,14 @@ $null = ([wmiclass]'Win32_Process').Create(('powershell.exe -NoProfile -WindowSt
 def remove_device(device):
     """Remove the support app from a computer and drop it from the group."""
     nodeids = [device["node_id"]]
-    # Installed as a service (the Mac support app), the agent uninstalls itself.
-    # The agent never answers this request, so don't wait for one.
-    _request({"action": "uninstallagent", "nodeids": nodeids}, None)
-    time.sleep(2)
     try:
         if device["windows"]:
+            # Let MSI own service removal and its uninstall registration. Calling
+            # MeshCentral's uninstall first would delete the binary but orphan MSI.
             run_command(device, STOP_WINDOWS, POWERSHELL, timeout=15)
         else:
+            _request({"action": "uninstallagent", "nodeids": nodeids}, None)
+            time.sleep(2)
             run_command(device, STOP_UNIX, SHELL, timeout=15)
     except MeshError:
         pass  # Already disconnected, usually because the uninstall worked.

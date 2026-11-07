@@ -38,9 +38,9 @@ def build():
     )
     if (
         not all(entries.get(key) for key in ("MeshID", "MeshServer", "ServerID"))
-        or entries.get("InstallFlags") != "1"
+        or entries.get("InstallFlags", "0") != "0"
     ):
-        raise ValueError("Expected the support group's run-only configuration")
+        raise ValueError("Expected the support group's service configuration")
     output = build_msi(
         ROOT / "release/TacticalSupport-windows.msi",
         legacy=clients[0],

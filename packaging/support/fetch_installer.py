@@ -102,7 +102,7 @@ def fetch(platform, destination):
             f"Fetched {platform} installer; SHA-256: {hashlib.file_digest(stream, 'sha256').hexdigest()}"
         )
     if windows:
-        config_params = {"id": group, "installflags": 1}
+        config_params = {"id": group, "installflags": 0}
         if os.environ.get("SUPPORT_MESH_DOWNLOAD_KEY"):
             config_params["key"] = os.environ["SUPPORT_MESH_DOWNLOAD_KEY"]
         with requests.get(
@@ -126,10 +126,10 @@ def fetch(platform, destination):
         )
         if (
             not all(entries.get(key) for key in ("MeshID", "MeshServer", "ServerID"))
-            or entries.get("InstallFlags") != "1"
+            or entries.get("InstallFlags", "0") != "0"
         ):
             raise ValueError(
-                "MeshCentral did not return a configured run-only support client"
+                "MeshCentral did not return a configured support service client"
             )
         destination.with_suffix(".msh").write_bytes(config)
 

@@ -22,7 +22,7 @@ This feature distributes your existing **MeshCentral** clients. It does not requ
 
 The invitation's client/site is an access-control and audit association in Tactical RMM. Installers enroll in the configured MeshCentral support group; invitation codes do not change embedded enrollment credentials or assign devices to a Tactical RMM site. Connect to the new device through MeshCentral using your existing technician identity.
 
-The Windows installer sets up a per-user support tool with MeshCentral's **run-only** installation flag, a Start menu shortcut, and an uninstaller. It starts no persistent Windows service. The universal Mac package installs the MeshCentral service and needs administrator permission plus the macOS permissions required for remote control. Configure user consent in MeshCentral; a download invitation is not a remote-control permission or a remote session lifetime. Revoking or expiring a code stops downloads and does not disconnect or uninstall an already downloaded client. Advise users about removal after support. Upstream MeshCentral downloads and already distributed copies remain subject to MeshCentral's own enrollment policy.
+The Windows MSI installs the **JustConnect Support** Windows service with administrator permission. It provides remote access after sign-out and restart without installing the Tactical RMM monitoring agent. Its service name and folder are separate from Access's Mesh Agent. The universal Mac package installs the MeshCentral service and needs administrator permission plus the macOS permissions required for remote control. Configure user consent in MeshCentral; a download invitation is not a remote-control permission or a remote session lifetime. Revoking or expiring a code stops downloads and does not disconnect or uninstall an already downloaded client. Advise users about removal after support. Upstream MeshCentral downloads and already distributed copies remain subject to MeshCentral's own enrollment policy.
 
 ## Sessions: the technician workspace
 
@@ -46,7 +46,7 @@ Open a computer's session to:
   - **Check progress** shows the person's answer to the Windows prompt and the end of the install log (`%TEMP%\JustConnect-install.log` or `/var/log/tacticalrmm-support-install.log`). While the Windows prompt is still open, the support app is busy and the check says so.
 - **Keep notes** on the **Notes** tab. Notes stay with the session for everyone who helps.
 - **See what happened** on the **Timeline** tab: the code, downloads, joins, commands, installs and notes, newest first.
-- **End session.** Use this once the computer is monitored, or when you're done helping. The Mac service uninstalls itself. On Windows, the server stops the run-only support app and runs its uninstaller. Then the computer is removed from the support group, so it can't reconnect. A computer that's offline is only taken off the list. If the person opens the support app again, it comes back.
+- **End session.** Use this once the computer is monitored, or when you're done helping. The Mac service uninstalls itself. On Windows, the server starts the MSI uninstaller in a separate process; it removes the support service, files and uninstall entry. Older per-user MSI installations still use their own uninstall entry. Then the computer is removed from the support group. A computer that's offline is only taken off the list and can reconnect unless its installed agent is removed.
 
 Installing the agent uses the same installer account and two-hour install token as the dashboard's installer. It's unavailable while `TRMM_INSECURE` is on. All MeshCentral traffic goes through the server's existing MeshCentral connection, and session actions only reach computers in the support group. Don't send the Mac support app to a Mac that already has the RMM agent: both use MeshCentral's standard Mac service. Use Take Control in the dashboard instead.
 
@@ -105,9 +105,11 @@ The installation and update scripts install these build tools. Docker images inc
 
 ### Windows setup
 
-`TacticalSupport-windows.msi` installs for the current Windows user. The native wizard offers Install, progress, cancellation and Finish, with an option to open the support app. It creates a Start menu shortcut and a Windows Installer uninstall entry. It does not install a persistent support service.
+`TacticalSupport-windows.msi` installs for the whole computer and requests administrator permission. The native wizard offers Install, progress, cancellation and Finish. It registers **JustConnect Support** as an automatic Windows service in `C:\Program Files\JustConnectSupport` and checks that the service starts. The user does not need to launch an agent window or click Connect. Remove it through Programs and Features or the technician console's End session action.
 
-Setup selects the x86 client on Windows 7 and on any 32-bit Windows edition. It selects x64 on newer 64-bit systems. There is no separate Windows 7 button. Downloads use verified HTTPS and an expected SHA-256 digest baked into the MSI. A changed or incomplete payload never runs. Cancellation removes the partial download; rollback restores the previous support executable. Repair downloads the same verified client again. No PowerShell, .NET runtime or command window is needed by the MSI.
+The MSI registers the service directly through Windows' native service API. It does not need an Inno Setup `[Run]` entry or a separate `MeshAgent.exe -fullinstall` command. `-fullinstall` creates an upstream installation outside the MSI's file ownership and defaults to the same Mesh Agent service name used by monitoring. The MSI supplies its own service name and explicitly reads its bundled server settings. File presence or an install helper's zero exit status alone is not accepted as a successful service installation. Service startup is checked separately from a successful connection to MeshCentral.
+
+Setup selects the x86 client on Windows 7 and on any 32-bit Windows edition. It selects x64 on newer 64-bit systems. There is no separate Windows 7 button. Downloads use verified HTTPS and an expected SHA-256 digest baked into the MSI. A changed or incomplete payload never runs. Cancellation removes the partial download; rollback restores the previous support executable and service. Repair and MSI upgrades preserve the agent's identity. No PowerShell, .NET runtime or command window is needed by the MSI. Previously installed per-user packages and Inno installers are separate installations; identify their exact paths before removing them.
 
 Clients are staged without enrollment data at `/support/payload/<sha256>/`. The generated MSI supplies the support group or monitoring enrollment settings. Payloads do not need the person's browser session, and remain available after an invitation expires so a previously downloaded MSI can complete setup. Keep these immutable payload files when publishing a new release; older MSIs still refer to their hashes.
 
@@ -124,6 +126,8 @@ The monitoring MSI needs administrator permission. Its native actions download a
 The MSI targets **Windows 7 SP1, 32-bit and 64-bit**. Its native action library and uninstall bridge are x86 builds using Windows 7 APIs. The generator checks the compatibility client's PE minimum OS/subsystem version and rejects known Windows 8+ static imports. It also checks the monitoring setup's x86 binary headers. These checks and native action tests do not replace installing and connecting from an actual Windows 7 computer. Test desktop control on both Windows 7 editions before marking a release verified on those systems.
 
 Windows must have working TLS 1.2 and current certificate roots. Setup preserves certificate validation and explains download failures. Azure-signed packages also need the Windows signing updates and Microsoft root certificate described in [Microsoft KB5022661](https://support.microsoft.com/en-gb/servicing/azure/update/2022/12/kb5022661-windows-support-for-the-trusted-signing-formerly-azure-code-signing-program). Unsigned packages can show an unknown-publisher warning.
+
+`packaging/support/diagnose_windows7.ps1` performs read-only OS, service, DNS, TCP 443 and certificate-validated WinHTTP TLS 1.2 checks. Run it on the affected machine before declaring Windows 7 verified. It does not change TLS settings or remove other remote access software. An ISP or router block on the MeshCentral hostname must be resolved on that network; an installed service cannot bypass it. Offline machines need a deployment tool that actually queues commands; the MSI itself does not provide an offline deployment queue.
 
 ### Mac setup
 
@@ -198,7 +202,7 @@ Optional `local_settings.py` settings. The name and email are only defaults; any
 ```python
 SUPPORT_BRAND_NAME = "JustConnect"
 SUPPORT_INSTALLER_BASE_URL = "https://api.example.com"
-SUPPORT_INSTALLER_VERSION = "1.0.0"
+SUPPORT_INSTALLER_VERSION = "1.0.1"
 SUPPORT_CONTACT_EMAIL = "support@example.com"
 SUPPORT_INSTALLER_DIR = "/var/lib/tactical-support/installers"
 SUPPORT_MESH_GROUP = "TacticalRMM Support"  # MeshCentral group name or ID
