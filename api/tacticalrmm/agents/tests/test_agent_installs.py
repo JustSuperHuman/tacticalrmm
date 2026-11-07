@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from django.http import HttpResponse
 from rest_framework.response import Response
 
 from tacticalrmm.test import TacticalTestCase
@@ -13,26 +14,30 @@ class TestAgentInstalls(TacticalTestCase):
 
     @patch("agents.utils.generate_linux_install")
     @patch("knox.models.AuthToken.objects.create")
-    @patch("tacticalrmm.utils.generate_winagent_exe")
+    @patch("tacticalrmm.utils.generate_winagent_msi")
     @patch("core.utils.token_is_valid")
     @patch("agents.views.get_agent_url")
     def test_install_agent(
         self,
         mock_agent_url,
         mock_token_valid,
-        mock_gen_win_exe,
+        mock_gen_win_msi,
         mock_auth,
         mock_linux_install,
     ):
         mock_agent_url.return_value = "https://example.com"
         mock_token_valid.return_value = "", False
-        mock_gen_win_exe.return_value = Response("ok")
+        mock_gen_win_msi.return_value = HttpResponse(
+            bytes.fromhex("d0cf11e0a1b11ae1"),
+            content_type="application/x-msi",
+            headers={"Content-Disposition": 'attachment; filename="generated.msi"'},
+        )
         mock_auth.return_value = "", "token"
         mock_linux_install.return_value = Response("ok")
 
         url = "/agents/installer/"
 
-        # test windows dynamic exe
+        # Legacy EXE requests now use the generated MSI path.
         data = {
             "installMethod": "exe",
             "client": self.site2.client.pk,
@@ -50,8 +55,10 @@ class TestAgentInstalls(TacticalTestCase):
 
         r = self.client.post(url, data, format="json")
         self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["Content-Type"], "application/x-msi")
+        self.assertIn("generated.msi", r["Content-Disposition"])
 
-        mock_gen_win_exe.assert_called_with(
+        mock_gen_win_msi.assert_called_with(
             client=self.site2.client.pk,
             site=self.site2.pk,
             agent_type="server",
@@ -86,21 +93,25 @@ class TestAgentInstalls(TacticalTestCase):
             download_url="https://example.com",
         )
 
-        # test manual
+        # Legacy Windows command/script requests also generate MSIs.
+        data["plat"] = "windows"
         data["rdp"] = 1
         data["installMethod"] = "manual"
         r = self.client.post(url, data, format="json")
-        self.assertIn("rdp", r.json()["cmd"])
-        self.assertNotIn("power", r.json()["cmd"])
+        self.assertEqual(r["Content-Type"], "application/x-msi")
+        self.assertEqual(mock_gen_win_msi.call_args.kwargs["rdp"], 1)
+        self.assertEqual(mock_gen_win_msi.call_args.kwargs["power"], 0)
 
         data.update({"ping": 1, "power": 1})
         r = self.client.post(url, data, format="json")
-        self.assertIn("power", r.json()["cmd"])
-        self.assertIn("ping", r.json()["cmd"])
+        self.assertEqual(r["Content-Type"], "application/x-msi")
+        self.assertEqual(mock_gen_win_msi.call_args.kwargs["power"], 1)
+        self.assertEqual(mock_gen_win_msi.call_args.kwargs["ping"], 1)
 
         # test powershell
         data["installMethod"] = "powershell"
         r = self.client.post(url, data, format="json")
         self.assertEqual(r.status_code, 200)
+        self.assertEqual(r["Content-Type"], "application/x-msi")
 
         self.check_not_authenticated("post", url)
