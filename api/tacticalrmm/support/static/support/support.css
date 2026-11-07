@@ -11,6 +11,7 @@
    <picture>), the mark beside any other company name, an uploaded logo alone. */
 .sp-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--sh-ink); font-size: var(--sh-text-md); font-weight: 650; letter-spacing: var(--sh-tight); }
 .sp-brand picture { display: contents; }
+.sp-brand picture > source { display: none; } /* else it's an empty flex item, and the gap after it shifts the logo */
 .sp-wordmark { display: block; width: auto; height: 40px; }
 .sp-mark { width: 32px; height: 32px; object-fit: contain; }
 .sp-logo { display: block; max-width: 220px; max-height: 48px; width: auto; height: auto; }

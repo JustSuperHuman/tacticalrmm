@@ -1,8 +1,10 @@
 /* JustConnect in the RMM dashboard (Access).
    nginx adds this script to the dashboard's page (support-site.sh), so the dashboard's
    own release stays untouched. It puts the JustConnect logo where the dashboard says
-   "Tactical RMM", and the Support | Access switch beside it. Support is the remote
-   support console, served from this same address at /support/manage/.
+   "Tactical RMM", and the Support | Access switch at the top of the client sidebar, in
+   the same place, size and style as the console's own switch, so it doesn't move when
+   you go between them. Support is the remote support console, served from this same
+   address at /support/manage/.
 
    Colors come from the JustUI tokens (--sh-*) when the dashboard skin
    (dashboard-skin/) is installed; the fallbacks suit the stock dark grey header. */
@@ -27,8 +29,8 @@
   const style = document.createElement("style");
   style.textContent = `
     @font-face { font-family: "JC Geist"; src: url("${asset("superhuman/fonts/Geist-Variable.woff2")}") format("woff2"); font-weight: 100 900; font-display: swap; }
-    .jc-brand { display: inline-flex; flex: none; align-items: center; gap: 16px; margin-right: 4px; vertical-align: middle; }
-    .jc-wordmark { display: block; width: auto; height: 24px; }
+    .jc-brand { display: inline-flex; flex: none; align-items: center; margin-right: 4px; vertical-align: middle; }
+    .jc-wordmark { display: block; width: auto; height: 26px; }
     .jc-login { display: block; width: auto; height: 40px; max-width: 100%; margin: 0 auto; }
 
     /* Which copy of the logo shows. The stock header is dark grey in both themes; with
@@ -38,23 +40,33 @@
     .jc-themed .body--light .jc-wordmark.jc-on-light { display: block; }
     .jc-themed .body--light .jc-wordmark.jc-on-dark { display: none; }
 
-    .jc-switch { display: inline-flex; flex: none; gap: 2px; padding: 2px; border-radius: 8px;
-      background: var(--sh-surface-3, rgba(0,0,0,.2)); box-shadow: inset 0 0 0 1px var(--sh-line, rgba(255,255,255,.12));
+    /* The switch copies the console's (.sh-seg.sp-switch in support.css): 12px from the
+       top and sides of a 244px sidebar, 34px tall, the two halves splitting the width. */
+    .jc-side { position: sticky; top: 0; z-index: 2; padding: 12px 10px; background: var(--sh-surface-2, #1d1d1d); }
+    .jc-switch { display: flex; gap: 2px; padding: 2px; border-radius: 8px;
+      background: var(--sh-surface-3, rgba(255,255,255,.06)); border: 1px solid var(--sh-line, rgba(255,255,255,.12));
       font: 500 13px/1 var(--sh-font, "JC Geist", ui-sans-serif, system-ui, sans-serif); letter-spacing: 0; }
-    /* Specific enough to keep its own colors over the skin's link color. */
-    html body .jc-brand .jc-switch > a.jc-tab[href] { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 6px;
-      color: var(--sh-muted, rgba(255,255,255,.68)); text-decoration: none; transition: color .12s ease, background-color .12s ease; }
-    html body .jc-brand .jc-switch > a.jc-tab[href]:hover { color: var(--sh-ink, #fff); }
-    html body .jc-brand .jc-switch > a.jc-tab[href]:focus-visible { outline: 2px solid var(--sh-accent, #8fa4ff); outline-offset: 1px; }
-    html body .jc-brand .jc-switch > a.jc-tab[aria-current="page"] { background: var(--sh-surface, #fff); color: var(--sh-ink, #0b0d10);
-      box-shadow: var(--sh-shadow-sm, 0 1px 2px rgba(0,0,0,.3)), 0 0 0 1px var(--sh-line, transparent); }
-    .jc-switch svg { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    /* Specific enough to keep its own colors over any link color. */
+    html body .jc-side .jc-switch > a.jc-tab[href] { flex: 1; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      height: 28px; padding: 0 11px; border-radius: 6px; color: var(--sh-muted, rgba(255,255,255,.68)); text-decoration: none;
+      transition: color .12s ease, background-color .12s ease; }
+    /* Below 900px the sidebar can be dragged narrow; the labels give way before the icons. */
+    .jc-switch a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    html body .jc-side .jc-switch > a.jc-tab[href]:hover { color: var(--sh-ink, #fff); }
+    html body .jc-side .jc-switch > a.jc-tab[href]:focus-visible { outline: none; box-shadow: var(--sh-focus, 0 0 0 2px #8fa4ff); }
+    html body .jc-side .jc-switch > a.jc-tab[aria-current="page"] { background: var(--sh-surface, #fff); color: var(--sh-ink, #0b0d10);
+      box-shadow: var(--sh-shadow-sm, 0 1px 2px rgba(0,0,0,.3)); }
+    .jc-switch svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Without the skin in light mode the sidebar is white, so the dark fallbacks above
+       would vanish there. */
+    html:not(.jc-themed) .body--light .jc-side { background: #fff; }
+    html:not(.jc-themed) .body--light .jc-switch { background: rgba(0,0,0,.05); border-color: rgba(0,0,0,.12); }
+    html:not(.jc-themed) body.body--light .jc-side .jc-switch > a.jc-tab[href]:not([aria-current]) { color: rgba(0,0,0,.6); }
+    html:not(.jc-themed) body.body--light .jc-side .jc-switch > a.jc-tab[href]:not([aria-current]):hover { color: #000; }
 
     @media (max-width: 599px) {
-      .jc-brand { gap: 10px; }
       .jc-wordmark { height: 20px; }
-      html body .jc-brand .jc-switch > a.jc-tab[href] { padding: 0 8px; }
-      .jc-switch a span { display: none; }
     }
   `;
   document.head.appendChild(style);
@@ -76,15 +88,25 @@
     if (!text) return;
     const brand = document.createElement("span");
     brand.className = "jc-brand";
-    brand.innerHTML =
-      wordmarks("jc-wordmark") +
+    brand.innerHTML = wordmarks("jc-wordmark");
+    title.insertBefore(brand, text);
+  }
+
+  // The switch heads the client sidebar, where the console has its own.
+  function sideSwitch() {
+    const sidebar = document.querySelector(".q-page > .q-splitter--vertical > .q-splitter__before");
+    if (!sidebar || sidebar.firstElementChild?.classList.contains("jc-side")) return;
+    sidebar.querySelector(":scope > .jc-side")?.remove();
+    const side = document.createElement("div");
+    side.className = "jc-side";
+    side.innerHTML =
       `<nav class="jc-switch" aria-label="Support or Access">` +
       `<a class="jc-tab" href="${SUPPORT_URL}">${HEADSET}<span>Support</span></a>` +
       `<a class="jc-tab" href="/" aria-current="page">${ACCESS}<span>Access</span></a>` +
       `</nav>`;
     // You're already in Access; leave the dashboard where it is.
-    brand.querySelector('[aria-current="page"]').addEventListener("click", (e) => e.preventDefault());
-    title.insertBefore(brand, text);
+    side.querySelector('[aria-current="page"]').addEventListener("click", (e) => e.preventDefault());
+    sidebar.prepend(side);
   }
 
   function brandLogin() {
@@ -123,13 +145,15 @@
     queued = false;
     noteSkin();
     brandHeader();
+    sideSwitch();
     brandLogin();
     brandTitle();
   }
   const soon = () => {
     if (!queued) {
       queued = true;
-      requestAnimationFrame(apply);
+      // A timer rather than requestAnimationFrame, which never runs in a background tab.
+      setTimeout(apply, 16);
     }
   };
 

@@ -46,6 +46,12 @@ bump, check these in light and dark mode:
 If one of these breaks, the rest of the skin still works; that one area falls back to
 upstream's look.
 
+On screens 900px and wider the dashboard takes the support console's frame: a fixed 244px
+client sidebar under a 52px header, so the brand and the Support | Access switch sit at the
+same spot on both pages. The client tree's drag-to-resize is off for that reason. The menu bar,
+toolbar and table footer heights add up to the same total upstream subtracts when it sizes
+the agent table (header 50 + menu bar 40 + 78), so keep that sum if you change one of them.
+
 ## Working on it
 
 Keep to the JustUI tokens (`--sh-*`) for every color. The token values are copied from
