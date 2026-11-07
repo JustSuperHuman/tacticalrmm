@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import devices, host, remote, toolbox, views
+from . import devices, host, installer_views, remote, toolbox, views
 
 app_name = "support"
 
@@ -8,7 +8,10 @@ urlpatterns = [
     path("", views.portal, name="portal"),
     path("reset/", views.reset, name="reset"),
     path("download/<str:platform>/", views.download, name="download"),
+    path("payload/<str:sha256>/", views.payload, name="payload"),
+    path("generated/", views.generated, name="generated"),
     path("manage/", host.sessions, name="manage"),
+    path("manage/installer/", installer_views.installer, name="installer"),
     path("manage/codes/<str:code_id>/", host.code, name="code"),
     path("manage/devices/", host.devices, name="devices"),
     path("manage/devices/<str:device_id>/", devices.device, name="device"),

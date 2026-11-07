@@ -22,12 +22,12 @@
             <button class="sh-btn sh-btn--ghost sh-btn--sm" type="submit">Need the {{ p.name }} version?</button>
             {% else %}
             <button class="sh-btn sh-btn--lg sh-btn--block sp-download-btn{% if p.recommended %} sh-btn--primary{% endif %}" type="submit">
-              <svg class="sp-icon sp-icon--fill" aria-hidden="true"><use href="#i-{{ p.key }}"/></svg>
+              <svg class="sp-icon sp-icon--fill" aria-hidden="true"><use href="#i-{{ p.icon }}"/></svg>
               <span>Download for {{ p.name }}</span>
               <svg class="sp-icon sp-trail" aria-hidden="true"><use href="#i-download"/></svg>
             </button>
             {% if p.installer.signed %}<p class="sp-meta"><svg class="sp-icon" aria-hidden="true"><use href="#i-shield"/></svg><span>{{ p.audience }}. Signed by {{ p.installer.signer }}.</span></p>
-            {% else %}<p class="sp-meta"><svg class="sp-icon" aria-hidden="true"><use href="#i-alert"/></svg><span>{{ p.audience }}. {% if p.key == 'windows' %}Windows may warn you before it opens. That’s expected for this app.{% else %}Your Mac may block it at first. That’s expected for this app.{% endif %}</span></p>{% endif %}
+            {% else %}<p class="sp-meta"><svg class="sp-icon" aria-hidden="true"><use href="#i-alert"/></svg><span>{{ p.audience }}. {% if p.key == 'macos' %}Your Mac may block it at first. That’s expected for this app.{% else %}Windows may warn you before it opens. That’s expected for this app.{% endif %}</span></p>{% endif %}
             {% endif %}
           </form>
           {% elif p.recommended or not known_device %}
@@ -39,10 +39,9 @@
         <div class="sp-next">
           <h2>After it downloads</h2>
           <ol class="sp-steps" data-steps="windows"{% if device == 'macos' %} hidden{% endif %}>
-            <li><span>Open the file you just downloaded. It’s in your Downloads folder.</span></li>
-            {% if windows_unsigned %}<li><span>If Windows says it protected your PC, choose <b>More info</b>, then <b>Run anyway</b>.</span></li>
-            {% else %}<li><span>If Windows asks whether to allow the app, choose <b>Yes</b>.</span></li>{% endif %}
-            <li><span>If you see a <b>Connect</b> button, choose it. Then leave the app open. Your technician will take it from there.</span></li>
+            <li><span>Open the <b>MSI installer</b> in your Downloads folder.</span></li>
+            <li><span>Choose <b>Install</b>. Setup downloads the right client for your computer, including Windows 7.</span></li>
+            <li><span>Choose <b>Finish</b> to open the app, then <b>Connect</b> if you see that button. Leave it open for your technician.</span></li>
           </ol>
           <ol class="sp-steps" data-steps="macos"{% if device != 'macos' %} hidden{% endif %}>
             <li><span>Open the file you just downloaded and follow the installer.{% if mac_unsigned %} If your Mac says it can’t be opened, go to <b>System Settings</b>, then <b>Privacy &amp; Security</b>, and choose <b>Open Anyway</b>.{% endif %}</span></li>

@@ -27,7 +27,7 @@ from logs.models import AuditLog
 from tacticalrmm.constants import AuditActionType, AuditObjType
 from tacticalrmm.permissions import _has_perm
 
-from . import mesh, meshapps, screens
+from . import generation, mesh, screens
 from .forms import BrandingForm, CreateAccessCodeForm
 from .models import (
     SupportAccessCode,
@@ -553,14 +553,16 @@ def setup(request):
         return _headers(HttpResponseRedirect(reverse("support:manage")))
     can_brand = _has_perm(request, "can_edit_core_settings")
     brand = _brand()
-    installers = {i.platform: i for i in SupportInstaller.objects.all()}
+    installers = {
+        i.platform: i for i in SupportInstaller.objects.filter(generated=True)
+    }
     context = {
         "brand": brand,
         "dashboard_url": dashboard_url(),
         "can_brand": can_brand,
         "platforms": [
             {"key": key, "installer": installers.get(key), **PLATFORMS[key]}
-            for key in ("windows", "macos")
+            for key in PLATFORMS
         ],
         "group_name": mesh.group_name(),
         "branding_saved": request.GET.get("saved") == "branding",
@@ -604,16 +606,20 @@ def setup(request):
             status = 400
         elif action == "apps":
             try:
-                results = meshapps.publish()
-            except (meshapps.Unavailable, mesh.MeshError) as exc:
-                context["error"] = f"Couldn’t get the support apps. {exc}"
+                results = generation.publish()
+            except (
+                generation.BuildError,
+                mesh.MeshError,
+                generation.meshapps.Unavailable,
+            ) as exc:
+                context["error"] = f"Couldn’t generate the installers. {exc}"
                 status = 503
             else:
                 AuditLog.objects.create(
                     username=request.user.username,
                     action=AuditActionType.MODIFY,
                     object_type=AuditObjType.CORE,
-                    message="Published unsigned support apps from MeshCentral.",
+                    message="Generated support installer packages.",
                     after_value=results,
                 )
                 return _headers(

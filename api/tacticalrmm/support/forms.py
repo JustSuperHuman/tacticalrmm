@@ -35,6 +35,31 @@ class AccessCodeForm(forms.Form):
         return code
 
 
+class MonitoringInstallerForm(forms.Form):
+    site = forms.ChoiceField(label="Client and site")
+    agent_type = forms.ChoiceField(
+        choices=[("workstation", "Workstation"), ("server", "Server")]
+    )
+    expires = forms.TypedChoiceField(
+        choices=[(2, "2 hours"), (24, "24 hours"), (168, "7 days")],
+        coerce=int,
+        initial=2,
+    )
+    rdp = forms.BooleanField(required=False, label="Enable Remote Desktop")
+    ping = forms.BooleanField(required=False, label="Allow ping")
+    power = forms.BooleanField(required=False, label="Prevent sleep and hibernation")
+
+    def __init__(self, sites, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["site"].choices = [
+            (str(site.pk), f"{site.client.name} — {site.name}") for site in sites
+        ]
+        for key in ("site", "agent_type", "expires"):
+            self.fields[key].widget.attrs.update(
+                {"class": "sh-input", "id": f"installer-{key}"}
+            )
+
+
 class CreateAccessCodeForm(forms.Form):
     site = forms.IntegerField(min_value=1)
     label = forms.CharField(max_length=100, required=False)

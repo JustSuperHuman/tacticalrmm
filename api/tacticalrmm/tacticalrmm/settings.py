@@ -3,6 +3,7 @@ import sys
 from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from tacticalrmm.util_settings import get_backend_url, get_root_domain, get_webdomain
 
@@ -222,6 +223,10 @@ if not DOCKER_BUILD:
     SESSION_COOKIE_DOMAIN = TRMM_ROOT_DOMAIN
     CSRF_COOKIE_DOMAIN = TRMM_ROOT_DOMAIN
     CSRF_TRUSTED_ORIGINS = [CORS_ORIGIN_WHITELIST[0], backend_url]
+    # The branded support host accepts code and download forms of its own.
+    support_origin = urlsplit(globals().get("SUPPORT_PUBLIC_URL", ""))
+    if support_origin.scheme == "https" and support_origin.netloc:
+        CSRF_TRUSTED_ORIGINS.append(f"https://{support_origin.netloc}")
     HEADLESS_FRONTEND_URLS = {
         "socialaccount_login_error": f"{CORS_ORIGIN_WHITELIST[0]}/account/provider/callback"
     }

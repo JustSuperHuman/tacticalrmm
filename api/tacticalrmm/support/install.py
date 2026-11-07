@@ -4,10 +4,8 @@ Both commands start the install in the background and return quickly, because th
 support app runs one command at a time. Progress is written to a log on the computer.
 """
 
-import base64
 import datetime as dt
 import shlex
-from pathlib import Path
 
 from django.conf import settings
 from knox.models import AuthToken
@@ -60,61 +58,51 @@ def _ps(value):
 
 
 def windows_command(site, agent_type):
-    """PowerShell for the support app, which runs as the signed-in person.
+    """Download a generated MSI and ask Windows to elevate its native setup UI."""
+    from .generation import BuildError, monitoring_ticket
 
-    It saves the official installer script to that person's private temp folder and
-    asks Windows to run it as an administrator, so they see a Windows permission
-    prompt. The install token stays out of command lines and out of the install log.
-    Their answer goes to a status file that `windows_progress_command` reads.
-    """
     _check_server()
-    version = settings.LATEST_AGENT_VER
-    codesign_token, _ = token_is_valid()
-    script = Path(settings.BASE_DIR / "core" / "installer.ps1").read_text()
-    for placeholder, value in {
-        "innosetupchange": f"tacticalagent-v{version}-windows-amd64.exe",
-        "clientchange": str(site.client_id),
-        "sitechange": str(site.pk),
-        "apichange": _api_url(),
-        "atypechange": agent_type,
-        "powerchange": "0",
-        "rdpchange": "0",
-        "pingchange": "0",
-        "downloadchange": get_agent_url(
-            goarch="amd64", plat=AgentPlat.WINDOWS, token=codesign_token
-        ),
-        "tokenchange": _install_token(),
-    }.items():
-        script = script.replace(placeholder, value)
-    elevated = (
-        # PowerShell has read the whole file by now, so the copy holding the token goes.
-        "Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue\n"
-        f"$log = {_ps(WINDOWS_LOG)}\n"
-        "New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null\n"
-        "Start-Transcript -Path $log -Force | Out-Null\n" + script
-    )
-    encoded = base64.b64encode(elevated.encode("utf-8")).decode()
+    try:
+        url, ticket = monitoring_ticket(
+            client=site.client_id,
+            site=site.pk,
+            agent_type=agent_type,
+            rdp=False,
+            ping=False,
+            power=False,
+            token=_install_token(),
+            api=_api_url(),
+            file_name="JustConnect-Monitoring.msi",
+        )
+    except (BuildError, ValueError) as exc:
+        raise InstallUnavailable(str(exc)) from exc
     return "\n".join(
         [
             f"$status = Join-Path $env:TEMP {_ps(WINDOWS_STATUS)}",
-            "$file = Join-Path $env:TEMP ('tacticalrmm-support-' + "
-            "[guid]::NewGuid().ToString('N') + '.ps1')",
-            "$script = [Text.Encoding]::UTF8.GetString("
-            f"[Convert]::FromBase64String('{encoded}'))",
-            "[IO.File]::WriteAllText($file, $script, (New-Object Text.UTF8Encoding $true))",
-            "Set-Content -LiteralPath $status -Value "
-            "'Waiting for them to choose Yes on the Windows prompt.'",
+            "$file = Join-Path $env:TEMP ('JustConnect-' + [guid]::NewGuid().ToString('N') + '.msi')",
+            "$log = Join-Path $env:TEMP 'JustConnect-install.log'",
             "try {",
-            "  Start-Process -FilePath powershell.exe -Verb RunAs -WindowStyle Hidden "
-            "-ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',"
-            "('\"' + $file + '\"'))",
-            "  Set-Content -LiteralPath $status -Value "
-            "'They chose Yes. The RMM agent is installing.'",
+            "  $http = New-Object -ComObject WinHttp.WinHttpRequest.5.1",
+            "  $http.Option(9) = 2048",
+            f"  $http.Open('GET', {_ps(url)}, $false)",
+            f"  $http.SetRequestHeader('Authorization', {_ps('Bearer ' + ticket)})",
+            "  $http.Send()",
+            "  if ($http.Status -ne 200) { throw 'The generated installer download expired. Start the installation again.' }",
+            "  [IO.File]::WriteAllBytes($file, [byte[]]$http.ResponseBody)",
+            "  Set-Content -LiteralPath $status -Value 'Waiting for them to choose Yes on the Windows prompt.'",
+            "  $arguments = '/i ' + [char]34 + $file + [char]34 + ' /passive /norestart /l*v ' + [char]34 + $log + [char]34",
+            "  $setup = Start-Process -FilePath 'msiexec.exe' -Verb RunAs -ArgumentList $arguments -PassThru",
+            "  Set-Content -LiteralPath $status -Value 'They chose Yes. The MSI is installing the monitoring agent.'",
+            # WMI is available in Windows 7's PowerShell 2; CIM cmdlets are not.
+            "  $cleanup = 'Wait-Process -Id ' + $setup.Id + ' -ErrorAction SilentlyContinue; Remove-Item -LiteralPath ' + [char]39 + $file.Replace([string][char]39, ([string][char]39 + [char]39)) + [char]39 + ' -Force -ErrorAction SilentlyContinue'",
+            "  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cleanup))",
+            "  $startup = ([wmiclass]'Win32_ProcessStartup').CreateInstance()",
+            "  $startup.ShowWindow = 0",
+            "  $null = ([wmiclass]'Win32_Process').Create(('powershell.exe -NoProfile -WindowStyle Hidden -EncodedCommand ' + $encoded), $null, $startup)",
             f"  {_ps(STARTED)}",
             "} catch {",
             "  Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue",
-            "  Set-Content -LiteralPath $status -Value "
-            "('The install didn''t start: ' + $_.Exception.Message)",
+            "  Set-Content -LiteralPath $status -Value ('The install did not start: ' + $_.Exception.Message)",
             f"  {_ps(NOT_STARTED)} + $_.Exception.Message",
             "}",
             "",
@@ -126,7 +114,7 @@ def windows_progress_command():
     return "\n".join(
         [
             f"$status = Join-Path $env:TEMP {_ps(WINDOWS_STATUS)}",
-            f"$log = {_ps(WINDOWS_LOG)}",
+            "$log = Join-Path $env:TEMP 'JustConnect-install.log'",
             # One line: the support app feeds PowerShell a line at a time, so an
             # "else" on its own line would be read as a new command.
             "if (Test-Path -LiteralPath $status) { Get-Content -LiteralPath $status } "

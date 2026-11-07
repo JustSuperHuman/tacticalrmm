@@ -87,6 +87,11 @@
 @keyframes sp-rise { from { opacity: 0; transform: translateY(6px); } }
 @keyframes sp-pop { from { transform: scale(.4); opacity: 0; } }
 
+.sp-installer-embed { max-width: 620px; margin-inline: auto; padding: 16px 20px; background: var(--sh-surface); }
+.sp-installer-embed .sp-head { text-align: left; }
+.sp-installer-embed h1 { font-size: var(--sh-text-xl); }
+.sp-installer-embed .sh-check { margin-top: 10px; }
+
 /* ---------- Technician workspace ----------
    Session groups in the sidebar, the live session list, and the selected session. */
 .sp-topbar-brand { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--sh-ink); text-decoration: none; }

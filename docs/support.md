@@ -10,7 +10,7 @@ Technicians need both **Install agents** and **Use MeshCentral** permissions. Si
 
 Open **Settings** in the console to set the logo, company name, help phone and help email. The logo, name and contacts appear on the public page and in the console header. People without a code see the phone and email. Logos can be PNG, JPEG, WebP or SVG up to 512 KB. The server checks the file's bytes, not its name, and serves SVGs with a sandboxing Content Security Policy. Branding is stored in the database, so it needs no media storage or nginx changes. Changing it requires the role permission for editing global settings (`can_edit_core_settings`; superusers always have it) and is recorded in the audit log. Tick **Use the default logo** and save to go back to the JustConnect logo. With no logo uploaded, the JustConnect wordmark stands in for the name, with a dark-mode copy for dark pages. Set a company name other than JustConnect, and the JustConnect mark sits beside that name instead. In dark mode, an uploaded logo sits on a light chip because most logos are drawn for light backgrounds.
 
-The pages use the JustUI kit (`static/support/superhuman/`, Geist fonts) and follow the visitor's light or dark system setting. Page styles live in `static/support/support.css` and use only the kit's tokens. Visitors on Windows or a Mac get their own version as the main download button. The other version stays one click away, and visitors on a phone or tablet are told to switch to their computer.
+The pages use the JustUI kit (`static/support/superhuman/`, Geist fonts) and follow the visitor's light or dark system setting. Page styles live in `static/support/support.css` and use only the kit's tokens. Visitors on Windows or a Mac get their platform as the main download button. The same Windows MSI supports Windows 7 SP1 and later. The other versions stay one click away, and visitors on a phone or tablet are told to switch to their computer.
 
 ## Access codes and downloads
 
@@ -40,10 +40,10 @@ Open a computer's session to:
 - **Join.** **Join** opens the remote control window (below) in its own window. **Terminal** and **Files** open MeshCentral in a new tab, already signed in, the same way the dashboard's Take Control does. With MeshCentral sync on (Tactical RMM's default), you sign in as your own MeshCentral account, and the console first gives that account rights to this one computer. A brand-new technician may need to wait a few minutes for sync to create their account. With sync off, the server's MeshCentral account is used, as in the dashboard. Each join is recorded in the audit log. The Windows support app runs in the person's own session, so it can't show the lock screen or a Windows permission prompt. On a Mac, the screen stays black until they allow Screen Recording for the support app.
 - **Run commands** on the **Commands** tab. It's a console that keeps the session's history: every command, who ran it, and what it printed, shared by everyone helping that computer. Choose PowerShell or Command Prompt on Windows, or the shell on a Mac. Pick a saved command from the toolbox, or press Ctrl+Enter to run what you typed. This needs the **Send command** role permission (`can_send_cmd`). On Windows, commands run as the person who opened the support app, without administrator rights. On a Mac, they run as root. The support app runs one command at a time, so a command that takes longer than 60 seconds shows "No reply" and keeps running. Every command is recorded in the audit log.
 - **Move to monitoring** on the **Monitoring** tab. Choose a client site and Workstation or Server, then **Install RMM agent**. The tab warns you if an agent with the same name is already monitored in a site you can see.
-  - On Windows, the support app saves the server's PowerShell installer to the person's private temp folder and asks Windows to run it as an administrator. They see a Windows prompt and must choose Yes, and an administrator password may be needed. You won't see that prompt when you join. The console waits 20 seconds for their answer. If they choose No, it says so and nothing is tracked. The install token never appears in a command line or in the install log.
+  - On Windows, the server generates a monitoring MSI and the support app downloads it into the person's private temp folder. Windows asks for administrator permission, then shows native installation progress. Download and cleanup run hidden. The capability used to download the MSI goes in an Authorization header and expires after 20 minutes. Enrollment data stays out of displayed commands and MSI logs; the monitoring client receives its short-lived token through its existing native command-line interface.
   - On a Mac, the install needs a Tactical RMM code signing token. The RMM installer removes any MeshCentral agent it finds, including the support app, so the console starts the install as its own launchd job. The job keeps running after the support app closes, and then the computer shows as offline.
   - The session shows **Monitored** once an agent with the same computer name checks in to that site (`Danas-MacBook` and `Danas-MacBook.local` match). After 20 minutes without a check-in, it stops waiting and says so.
-  - **Check progress** shows the person's answer to the Windows prompt and the end of the install log (`C:\ProgramData\TacticalRMM\support-install.log` or `/var/log/tacticalrmm-support-install.log`). While the Windows prompt is still open, the support app is busy and the check says so.
+  - **Check progress** shows the person's answer to the Windows prompt and the end of the install log (`%TEMP%\JustConnect-install.log` or `/var/log/tacticalrmm-support-install.log`). While the Windows prompt is still open, the support app is busy and the check says so.
 - **Keep notes** on the **Notes** tab. Notes stay with the session for everyone who helps.
 - **See what happened** on the **Timeline** tab: the code, downloads, joins, commands, installs and notes, newest first.
 - **End session.** Use this once the computer is monitored, or when you're done helping. The Mac service uninstalls itself. On Windows, the server stops the run-only support app and runs its uninstaller. Then the computer is removed from the support group, so it can't reconnect. A computer that's offline is only taken off the list. If the person opens the support app again, it comes back.
@@ -87,22 +87,59 @@ Run it again with another public name to move the support page, for example to t
 
 Technicians sign in to Access. The session is shared across the root domain, so Support works straight away after that, and so does `https://<api-host>/support/manage/`.
 
-## Unsigned support apps until signing is ready
+## Generated installers only
 
-Until signed apps are published, **Get unsigned apps from MeshCentral** in the console's **Settings** (or `python manage.py publish_meshcentral_installers` on the server) takes both apps straight from MeshCentral for the support group. Windows gets MeshCentral's x64 **interactive only** agent: a small window with a Connect button, run by the person's own account, with no service and the group's settings built in. The Mac gets MeshCentral's universal installer package, which installs the agent as a service. Getting them needs the global settings permission and is recorded in the audit log.
+The support page serves generated packages: one Windows MSI and a universal Mac package. Raw MeshCentral Windows EXEs and the old generated EXE/PowerShell paths are no longer download choices. Existing installer records stay inactive until a generated package replaces them.
 
-These apps aren't code-signed by you, so people see a warning first. The support page tells them what to expect: on Windows, **More info**, then **Run anyway**; on a Mac, **System Settings** > **Privacy & Security** > **Open Anyway**. Settings marks them **Unsigned**. Signed apps already published are kept unless you pass `--replace-signed`, and publishing signed apps later replaces the unsigned ones. Get them again after changing MeshCentral's group, address or certificate.
+In Support, open **Settings** and choose **Generate support installers**. This requires the global settings permission and records the result in the audit log. On the server:
+
+```sh
+sudo apt install wixl msitools g++-mingw-w64-i686
+cd /rmm/api/tacticalrmm
+./env/bin/python manage.py migrate
+./env/bin/python manage.py collectstatic --noinput
+./env/bin/python manage.py generate_support_installers
+```
+
+The installation and update scripts install these build tools. Docker images include them too. Use `--platform windows` or `--platform macos` to generate just one package. The older `publish_meshcentral_installers` command is an alias for this generator and cannot publish raw Windows clients. Existing signed generated packages are kept unless `--replace-signed` is supplied.
+
+### Windows setup
+
+`TacticalSupport-windows.msi` installs for the current Windows user. The native wizard offers Install, progress, cancellation and Finish, with an option to open the support app. It creates a Start menu shortcut and a Windows Installer uninstall entry. It does not install a persistent support service.
+
+Setup selects the x86 client on Windows 7 and on any 32-bit Windows edition. It selects x64 on newer 64-bit systems. There is no separate Windows 7 button. Downloads use verified HTTPS and an expected SHA-256 digest baked into the MSI. A changed or incomplete payload never runs. Cancellation removes the partial download; rollback restores the previous support executable. Repair downloads the same verified client again. No PowerShell, .NET runtime or command window is needed by the MSI.
+
+Clients are staged without enrollment data at `/support/payload/<sha256>/`. The generated MSI supplies the support group or monitoring enrollment settings. Payloads do not need the person's browser session, and remain available after an invitation expires so a previously downloaded MSI can complete setup. Keep these immutable payload files when publishing a new release; older MSIs still refer to their hashes.
+
+### Access and moving to monitoring
+
+Access's Windows **Add an agent** dialog uses **Generate and download MSI**. The form retains client/site, server/workstation, enrollment expiry and optional Windows settings. It selects the client architecture during installation. The old `exe`, `manual` and `powershell` API values all return a generated MSI for Windows, preserving integrations while removing script and raw EXE responses. The generator runs on this server; enrollment tokens are no longer sent to the external EXE-generation service.
+
+The monitoring MSI needs administrator permission. Its native actions download a verified upstream monitoring setup, run that setup hidden, and enroll the client with its existing native interface. Service setup and cleanup stay with the upstream agent. An `unins001.exe` bridge directs the agent's existing remote Remove action to Windows Installer. Repair preserves an existing enrollment. Existing monitored installations must be updated through Access rather than enrolled again.
+
+`support/static/support/access.js`, already injected by `support-site.sh`, supplies the new Windows form in the separately built dashboard. Run `support-site.sh` after deploying this fork if the dashboard does not yet load that script. Mac and Linux monitoring retain their platform-specific installation paths.
+
+### Windows 7 compatibility
+
+The MSI targets **Windows 7 SP1, 32-bit and 64-bit**. Its native action library and uninstall bridge are x86 builds using Windows 7 APIs. The generator checks the compatibility client's PE minimum OS/subsystem version and rejects known Windows 8+ static imports. It also checks the monitoring setup's x86 binary headers. These checks and native action tests do not replace installing and connecting from an actual Windows 7 computer. Test desktop control on both Windows 7 editions before marking a release verified on those systems.
+
+Windows must have working TLS 1.2 and current certificate roots. Setup preserves certificate validation and explains download failures. Azure-signed packages also need the Windows signing updates and Microsoft root certificate described in [Microsoft KB5022661](https://support.microsoft.com/en-gb/servicing/azure/update/2022/12/kb5022661-windows-support-for-the-trusted-signing-formerly-azure-code-signing-program). Unsigned packages can show an unknown-publisher warning.
+
+### Mac setup
+
+MeshCentral generates a configured flat `.pkg` containing both Intel and Apple silicon binaries, the launch daemon and launch agent. Installation needs a Mac administrator password, followed by Screen Recording and Accessibility permission for remote control. The package is unsigned until the Apple signing and notarization workflow runs. Signing does not affect whether a package qualifies as generated.
 
 ## Build signed installers
 
-Run the **Signed support installers** workflow manually from a trusted branch and provide a release version, such as `1.0.0`. Create a GitHub environment named **`support-signing`**. Restrict that environment to your release branch and authorized release operators. The workflow fetches configured binaries from your MeshCentral server over verified HTTPS, signs the final Windows executable with Azure, signs the Mac payload and package with Apple, notarizes and staples it, then emits the **`signed-support-installers`** artifact.
+Run the **Signed support installers** workflow manually from a trusted branch and provide a release version, such as `1.0.0`. Choose `all`, `windows` or `macos`; a Mac-only release does not need Azure credentials or a Windows build. Create a GitHub environment named **`support-signing`**. Restrict that environment to your release branch and authorized release operators. The workflow fetches configured binaries from your MeshCentral server over verified HTTPS, signs the generated Windows MSI with Azure, signs the Mac payload and package with Apple, notarizes and staples it, then emits the **`signed-support-installers`** artifact.
 
-Azure Artifact Signing (formerly Trusted Signing) signs the Windows client. macOS distribution uses Apple's Developer ID certificates and Apple notarization; Azure Windows signatures cannot replace those.
+Azure Artifact Signing (formerly Trusted Signing) signs the generated Windows MSI. macOS distribution uses Apple's Developer ID certificates and Apple notarization; Azure Windows signatures cannot replace those.
 
 Configure these environment variables:
 
 | Variable | Value |
 | --- | --- |
+| `SUPPORT_INSTALLER_BASE_URL` | Public HTTPS API or support host that serves `/support/payload/`; required for the MSI build |
 | `SUPPORT_MESH_URL` | Public HTTPS MeshCentral base URL, including a domain path if used; no query string or credentials |
 | `AZURE_SIGNING_ENDPOINT` | Your Azure Artifact Signing region endpoint, e.g. `https://eus.codesigning.azure.net/` |
 | `AZURE_SIGNING_ACCOUNT_NAME` | Azure signing account name |
@@ -137,17 +174,19 @@ Append `:environment:support-signing` to the returned `sub_claim_prefix`. For im
 
 There is no Azure client secret stored in Django. Signing credentials stay in CI, and the Mac keychain is temporary and removed on completion.
 
-Signatures are verified with native platform tools before the manifest is produced. Windows packaging signs the raw client, keeps its `.msh` enrollment configuration beside it, builds an interactive installer with Inno Setup 6, and signs the finished installer. This avoids losing embedded enrollment data when Authenticode signatures are replaced. Both operating system jobs must succeed before the final bundle is assembled. No signing, timestamping, customization, or binary modifications happen during a public download. Rebuild and sign a new release after changing MeshCentral's group, hostname, certificate, or client branding.
+Signatures are verified with native platform tools before the manifest is produced. Linux generates the MSI with both client payloads; Windows signs the final package with Azure. Mac signing and notarization run independently. The release manifest uses schema 2 and records generated package formats, hashes and the immutable client payloads. Every selected platform must succeed before the final bundle is assembled. Public downloads serve the generated bytes without modifying them. Regenerate packages after changing the support group, server address, client binaries or branding.
 
 ## Publish a release on the RMM server
 
-Download and extract **`signed-support-installers`** from your trusted workflow. Keep `manifest.json` and both installers together. Use the RMM application's operating system account so the web workers can read the resulting private files:
+Download and extract **`signed-support-installers`** from your trusted workflow. Keep `manifest.json`, the included installers and the `payloads/` directory together. A bundle can contain Windows, Mac or both; publishing it preserves the other platforms already available. Use the RMM application's operating system account so the web workers can read the resulting private files:
 
 ```sh
 cd /rmm/api/tacticalrmm
 ./env/bin/python manage.py migrate
 ./env/bin/python manage.py collectstatic --noinput
 ./env/bin/python manage.py publish_support_installers /path/to/extracted-release
+# For a trusted generated bundle that has not been signed yet:
+# ./env/bin/python manage.py publish_support_installers /path/to/extracted-release --allow-unsigned
 ```
 
 Use the Python interpreter from your deployment's actual virtual environment (the path varies). Restart the Django workers after deploying this feature. Docker deployments run these commands inside the backend container and must persist the installer directory alongside other private agent artifacts.
@@ -158,6 +197,8 @@ Optional `local_settings.py` settings. The name and email are only defaults; any
 
 ```python
 SUPPORT_BRAND_NAME = "JustConnect"
+SUPPORT_INSTALLER_BASE_URL = "https://api.example.com"
+SUPPORT_INSTALLER_VERSION = "1.0.0"
 SUPPORT_CONTACT_EMAIL = "support@example.com"
 SUPPORT_INSTALLER_DIR = "/var/lib/tactical-support/installers"
 SUPPORT_MESH_GROUP = "TacticalRMM Support"  # MeshCentral group name or ID

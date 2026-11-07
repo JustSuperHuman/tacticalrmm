@@ -37,7 +37,7 @@ jobs:
       - name: Install redis
         run: |
           sudo apt update
-          sudo apt install -y redis
+          sudo apt install -y redis wixl msitools g++-mingw-w64-i686
           redis-server --version
 
       - name: Install requirements

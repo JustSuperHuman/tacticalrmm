@@ -1,6 +1,7 @@
-from unittest.mock import mock_open, patch
+from unittest.mock import patch
 
-import requests
+from django.http import HttpResponse
+from support.installer.builder import BuildError
 from django.test import override_settings
 
 from checks.constants import CHECK_DEFER, CHECK_RESULT_DEFER
@@ -21,9 +22,8 @@ class TestUtils(TacticalTestCase):
     def setUp(self):
         self.setup_coresettings()
 
-    @patch("requests.post")
-    @patch("__main__.__builtins__.open", new_callable=mock_open)
-    def test_generate_winagent_exe_success(self, m_open, mock_post):
+    @patch("support.generation.monitoring_response", return_value=HttpResponse(b"MSI"))
+    def test_generated_compatibility_path_returns_msi(self, generate):
         r = generate_winagent_exe(
             client=1,
             site=1,
@@ -38,9 +38,11 @@ class TestUtils(TacticalTestCase):
         )
         self.assertEqual(r.status_code, 200)
 
-    @patch("requests.post")
-    def test_generate_winagent_exe_timeout(self, mock_post):
-        mock_post.side_effect = requests.exceptions.ConnectionError()
+    @patch(
+        "support.generation.monitoring_response",
+        side_effect=BuildError("Installer build failed"),
+    )
+    def test_generated_msi_failure_is_reported(self, generate):
 
         r = generate_winagent_exe(
             client=1,

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core import signing
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import F
@@ -35,6 +36,7 @@ from .models import (
     SupportAccessCode,
     SupportBranding,
     SupportInstaller,
+    SupportPayload,
     code_digest,
     generate_code,
 )
@@ -44,8 +46,16 @@ INVALID_CODE = (
     "That code didn’t work. It may have expired. Ask your technician for a new one."
 )
 PLATFORMS = {
-    "windows": {"name": "Windows", "audience": "For Windows PCs"},
-    "macos": {"name": "Mac", "audience": "For Macs with Apple silicon or Intel"},
+    "windows": {
+        "name": "Windows",
+        "audience": "For Windows 7 SP1 and later. Setup chooses the right client",
+        "icon": "windows",
+    },
+    "macos": {
+        "name": "Mac",
+        "audience": "For Macs with Apple silicon or Intel",
+        "icon": "macos",
+    },
 }
 
 
@@ -134,9 +144,14 @@ def _unsigned(installer):
 
 def _context(request, **extra):
     grant = _grant(request)
-    installers = {i.platform: i for i in SupportInstaller.objects.all()}
+    installers = {
+        i.platform: i for i in SupportInstaller.objects.filter(generated=True)
+    }
     device = _device(request)
-    order = ("macos", "windows") if device == "macos" else ("windows", "macos")
+    order = list(PLATFORMS)
+    if device in order:
+        order.remove(device)
+        order.insert(0, device)
     return {
         "brand": _brand(),
         "device": device,
@@ -301,14 +316,18 @@ def _audit(request, code, action, message):
 @never_cache
 @require_POST
 def download(request, platform):
-    if platform not in SupportInstaller.Platform.values:
+    if platform == "windows7":
+        platform = "windows"
+    if platform not in PLATFORMS:
         return _portal_response(request, "Choose the Windows or Mac version.", 404)
     code = _grant(request)
     if not code:
         return _portal_response(
             request, "Your download time ran out. Enter your code again.", 403
         )
-    installer = SupportInstaller.objects.filter(platform=platform).first()
+    installer = SupportInstaller.objects.filter(
+        platform=platform, generated=True
+    ).first()
     if not installer:
         return _portal_response(
             request,
@@ -352,6 +371,70 @@ def download(request, platform):
         raise
     return _headers(
         FileResponse(stream, as_attachment=True, filename=installer.filename)
+    )
+
+
+@require_GET
+def payload(request, sha256):
+    """Only unconfigured, hash-addressed clients staged by the generator.
+
+    Unlike the MSI, a client payload contains no site, token, or support-group
+    enrollment data. It is intentionally independent of a browser download grant.
+    """
+    if not re.fullmatch(r"[a-f0-9]{64}", sha256):
+        raise Http404
+    artifact = get_object_or_404(SupportPayload, pk=sha256)
+    try:
+        stream = _open_installer(artifact)
+    except OSError:
+        raise Http404 from None
+    response = FileResponse(
+        stream,
+        as_attachment=True,
+        filename="client.exe",
+        content_type="application/octet-stream",
+    )
+    response["Cache-Control"] = "public, max-age=31536000, immutable"
+    return _headers(response)
+
+
+@never_cache
+@require_GET
+def generated(request):
+    """A private generated MSI; its capability travels in a header, never a URL."""
+    authorization = request.headers.get("Authorization", "")
+    if not authorization.startswith("Bearer "):
+        return HttpResponse(status=403)
+    try:
+        data = signing.loads(
+            authorization[7:], salt="generated-installers", max_age=20 * 60
+        )
+        digest, size = data["sha256"], data["size"]
+        if (
+            not isinstance(digest, str)
+            or not re.fullmatch(r"[a-f0-9]{64}", digest)
+            or type(size) is not int
+            or not 0 < size <= 32 * 1024 * 1024
+        ):
+            raise ValueError
+    except (signing.BadSignature, ValueError, TypeError, KeyError):
+        return HttpResponse(status=403)
+    from types import SimpleNamespace
+
+    artifact = SimpleNamespace(
+        sha256=digest, size=size, storage_name=f"generated/{digest}.msi"
+    )
+    try:
+        stream = _open_installer(artifact)
+    except OSError:
+        raise Http404 from None
+    return _headers(
+        FileResponse(
+            stream,
+            as_attachment=True,
+            filename="JustConnect-Monitoring.msi",
+            content_type="application/x-msi",
+        )
     )
 
 

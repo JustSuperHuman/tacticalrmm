@@ -28,6 +28,10 @@
 
   const style = document.createElement("style");
   style.textContent = `
+    .jc-installer-frame { display: block; width: 100%; height: min(650px, 70vh); min-height: 450px; border: 0; }
+    .jc-installer-frame[hidden] { display: none; }
+    .jc-generated-only > .q-card__section:not(.jc-platform-choice),
+    .jc-generated-only > .q-card__actions { display: none; }
     @font-face { font-family: "JC Geist"; src: url("${asset("superhuman/fonts/Geist-Variable.woff2")}") format("woff2"); font-weight: 100 900; font-display: swap; }
     .jc-brand { display: inline-flex; flex: none; align-items: center; margin-right: 4px; vertical-align: middle; }
     .jc-wordmark { display: block; width: auto; height: 26px; }
@@ -141,6 +145,31 @@
   }
 
   let queued = false;
+  function generatedInstallers() {
+    for (const form of document.querySelectorAll(".q-dialog .q-form")) {
+      const card = form.closest(".q-card");
+      if (!card?.querySelector(".text-h6")?.textContent.includes("Add an agent")) continue;
+      const windows = [...form.querySelectorAll('.q-radio[role="radio"]')].find((radio) =>
+        (radio.getAttribute("aria-label") || radio.textContent.trim()) === "Windows");
+      if (!windows) continue;
+      windows.closest(".q-card__section")?.classList.add("jc-platform-choice");
+      const selected = windows.getAttribute("aria-checked") === "true";
+      form.classList.toggle("jc-generated-only", selected);
+      let frame = form.querySelector(":scope > .jc-installer-frame");
+      if (selected && !frame) {
+        frame = document.createElement("iframe");
+        frame.className = "jc-installer-frame";
+        frame.title = "Generate a Windows MSI installer";
+        frame.src = "/support/manage/installer/?embed=1";
+        frame.addEventListener("load", () => {
+          if (frame.contentDocument) frame.contentDocument.documentElement.dataset.theme = document.body.classList.contains("body--dark") ? "dark" : "light";
+        });
+        form.appendChild(frame);
+      }
+      if (frame) frame.hidden = !selected;
+    }
+  }
+
   function apply() {
     queued = false;
     noteSkin();
@@ -148,6 +177,7 @@
     sideSwitch();
     brandLogin();
     brandTitle();
+    generatedInstallers();
   }
   const soon = () => {
     if (!queued) {
@@ -165,5 +195,7 @@
     childList: true,
     subtree: true,
     characterData: true,
+    attributes: true,
+    attributeFilter: ["aria-checked"],
   });
 })();

@@ -4,7 +4,6 @@ import json
 import random
 import string
 import time
-from io import StringIO
 from pathlib import Path
 
 from django.conf import settings
@@ -783,16 +782,21 @@ def install_agent(request):
 
     insecure = getattr(settings, "TRMM_INSECURE", False)
 
-    if insecure and request.data["installMethod"] in {"exe", "powershell"}:
+    if insecure and (
+        request.data["plat"] == AgentPlat.WINDOWS
+        or request.data["installMethod"] in {"exe", "powershell"}
+    ):
         return notify_error(
-            "Not available in insecure mode. Please use the 'Manual' method."
+            "Generated installers require the server's verified HTTPS connection."
         )
 
     # TODO rework this ghetto validation hack
     # https://github.com/amidaware/tacticalrmm/issues/1461
     try:
-        int(request.data["expires"])
-    except ValueError:
+        expiry_hours = int(request.data["expires"])
+        if not 1 <= expiry_hours <= 720:
+            raise ValueError
+    except (ValueError, TypeError):
         return notify_error("Please enter a valid number of hours")
 
     client_id = request.data["client"]
@@ -800,9 +804,25 @@ def install_agent(request):
     version = settings.LATEST_AGENT_VER
     goarch = request.data["goarch"]
     plat = request.data["plat"]
+    method = request.data["installMethod"]
+    if (
+        (
+            plat == AgentPlat.WINDOWS
+            and method not in {"msi", "exe", "manual", "powershell"}
+        )
+        or (plat == AgentPlat.LINUX and method != "bash")
+        or (plat == AgentPlat.DARWIN and method != "mac")
+        or plat not in {AgentPlat.WINDOWS, AgentPlat.LINUX, AgentPlat.DARWIN}
+    ):
+        return notify_error("Choose a valid installer platform.")
 
     if not _has_perm_on_site(request.user, site_id):
         raise PermissionDenied()
+
+    from clients.models import Site
+
+    if not Site.objects.filter(pk=site_id, client_id=client_id).exists():
+        return notify_error("Choose a site belonging to the selected client.")
 
     codesign_token, is_valid = token_is_valid()
 
@@ -818,8 +838,12 @@ def install_agent(request):
     download_url = get_agent_url(goarch=goarch, plat=plat, token=codesign_token)
 
     installer_user = User.objects.filter(is_installer_user=True).first()
+    if installer_user is None:
+        return notify_error(
+            "Create the server's installer account before generating installers."
+        )
 
-    _, token = AuthToken.objects.create(
+    installer_auth, token = AuthToken.objects.create(
         user=installer_user, expiry=dt.timedelta(hours=int(request.data["expires"]))
     )
 
@@ -838,10 +862,10 @@ def install_agent(request):
         token,
     ]
 
-    if request.data["installMethod"] == "exe":
-        from tacticalrmm.utils import generate_winagent_exe
+    if plat == AgentPlat.WINDOWS:
+        from tacticalrmm.utils import generate_winagent_msi
 
-        return generate_winagent_exe(
+        response = generate_winagent_msi(
             client=client_id,
             site=site_id,
             agent_type=request.data["agenttype"],
@@ -850,9 +874,12 @@ def install_agent(request):
             power=request.data["power"],
             goarch=goarch,
             token=token,
-            api=request.data["api"],
-            file_name=request.data["fileName"],
+            api=request.data.get("api") or f"https://{settings.ALLOWED_HOSTS[0]}",
+            file_name=request.data.get("fileName", "JustConnect-Monitoring.msi"),
         )
+        if response.status_code != 200:
+            installer_auth.delete()
+        return response
 
     elif request.data["installMethod"] == "bash":
         from agents.utils import generate_linux_install
@@ -867,70 +894,15 @@ def install_agent(request):
             download_url=download_url,
         )
 
-    elif request.data["installMethod"] in {"manual", "mac"}:
-        resp = {}
-        if request.data["installMethod"] == "manual":
-            cmd = [
-                inno,
-                "/VERYSILENT",
-                "/SUPPRESSMSGBOXES",
-                "&&",
-                "ping",
-                "127.0.0.1",
-                "-n",
-                "7",
-                "&&",
-                r'"C:\Program Files\TacticalAgent\tacticalrmm.exe"',
-            ] + install_flags
-
-            if int(request.data["rdp"]):
-                cmd.append("--rdp")
-            if int(request.data["ping"]):
-                cmd.append("--ping")
-            if int(request.data["power"]):
-                cmd.append("--power")
-
-            if insecure:
-                cmd.append("--insecure")
-
-            resp["cmd"] = " ".join(str(i) for i in cmd)
-        else:
-            install_flags.insert(0, f"sudo ./{inno}")
-            cmd = install_flags.copy()
-            dl = f"curl -L -o {inno} '{download_url}'"
-            resp["cmd"] = (
-                dl + f" && chmod +x {inno} && " + " ".join(str(i) for i in cmd)
-            )
-            if insecure:
-                resp["cmd"] += " --insecure"
-
-        resp["url"] = download_url
-
-        return Response(resp)
-
-    elif request.data["installMethod"] == "powershell":
-        text = Path(settings.BASE_DIR / "core" / "installer.ps1").read_text()
-
-        replace_dict = {
-            "innosetupchange": inno,
-            "clientchange": str(client_id),
-            "sitechange": str(site_id),
-            "apichange": request.data["api"],
-            "atypechange": request.data["agenttype"],
-            "powerchange": str(request.data["power"]),
-            "rdpchange": str(request.data["rdp"]),
-            "pingchange": str(request.data["ping"]),
-            "downloadchange": download_url,
-            "tokenchange": token,
-        }
-
-        for i, j in replace_dict.items():
-            text = text.replace(i, j)
-
-        with StringIO(text) as fp:
-            response = HttpResponse(fp.read(), content_type="text/plain")
-            response["Content-Disposition"] = "attachment; filename=rmm-installer.ps1"
-            return response
+    elif request.data["installMethod"] == "mac":
+        install_flags.insert(0, f"sudo ./{inno}")
+        command = f"curl -L -o {inno} '{download_url}'"
+        command += f" && chmod +x {inno} && " + " ".join(
+            str(item) for item in install_flags
+        )
+        if insecure:
+            command += " --insecure"
+        return Response({"cmd": command, "url": download_url})
 
 
 @api_view(["POST"])

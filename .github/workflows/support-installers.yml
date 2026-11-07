@@ -7,6 +7,12 @@ on:
         description: Support release version (for example 1.0.0)
         required: true
         type: string
+      platform:
+        description: Installer to build (platforms can be released independently)
+        required: true
+        default: all
+        type: choice
+        options: [all, windows, macos]
 
 permissions:
   contents: read
@@ -16,15 +22,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  windows-build:
+    if: inputs.platform != 'macos'
+    runs-on: ubuntu-latest
     environment: support-signing
-    permissions:
-      contents: read
-      id-token: write
     env:
       SUPPORT_VERSION: ${{ inputs.version }}
       SUPPORT_MESH_URL: ${{ vars.SUPPORT_MESH_URL }}
+      SUPPORT_INSTALLER_BASE_URL: ${{ vars.SUPPORT_INSTALLER_BASE_URL }}
       SUPPORT_MESH_GROUP_ID: ${{ secrets.SUPPORT_MESH_GROUP_ID }}
       SUPPORT_MESH_DOWNLOAD_KEY: ${{ secrets.SUPPORT_MESH_DOWNLOAD_KEY }}
       SUPPORT_MESH_DOWNLOAD_COOKIE: ${{ secrets.SUPPORT_MESH_DOWNLOAD_COOKIE }}
@@ -33,52 +38,65 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Fetch configured Windows support tool
+      - name: Install native MSI build tools
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wixl msitools g++-mingw-w64-i686
           python -m pip install requests==2.34.2
-          python packaging/support/fetch_installer.py --platform windows --output payload/MeshAgent.exe
+      - name: Fetch both client architectures and generate one MSI
+        run: |
+          python packaging/support/fetch_installer.py --platform windows7 --output payload/windows7/MeshAgent.exe
+          python packaging/support/fetch_installer.py --platform windows --output payload/windows/MeshAgent.exe
+          python packaging/support/build_windows.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-msi
+          path: release/
+          if-no-files-found: error
+          retention-days: 2
+
+  windows:
+    needs: windows-build
+    if: inputs.platform != 'macos'
+    runs-on: windows-latest
+    environment: support-signing
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SUPPORT_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: unsigned-windows-msi
+          path: release/
       - name: Authenticate to Azure with OpenID Connect
         uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Sign the Windows client payload
-        uses: azure/artifact-signing-action@v2
-        with:
-          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ vars.AZURE_SIGNING_CERTIFICATE_PROFILE }}
-          files-folder: ${{ github.workspace }}\payload
-          files-folder-filter: exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-      - name: Build the interactive Windows installer
-        shell: pwsh
-        run: |
-          $payloadSignature = Get-AuthenticodeSignature -LiteralPath payload/MeshAgent.exe
-          if ($payloadSignature.Status -ne 'Valid') { throw 'The client payload signature is invalid.' }
-          choco install innosetup --yes --no-progress
-          if ($LASTEXITCODE -ne 0) { throw 'Could not install Inno Setup.' }
-          python packaging/support/build_windows.py
-      - name: Sign the final Windows installer
+      - name: Sign the generated Windows MSI
         uses: azure/artifact-signing-action@v2
         with:
           endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
           signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ vars.AZURE_SIGNING_CERTIFICATE_PROFILE }}
           files-folder: ${{ github.workspace }}\release
-          files-folder-filter: exe
+          files-folder-filter: msi
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
-      - name: Verify signature and record final file digest
+      - name: Verify MSI signature and record the final digest
         shell: pwsh
         run: |
-          $signature = Get-AuthenticodeSignature -LiteralPath release/TacticalSupport-windows.exe
+          $signature = Get-AuthenticodeSignature -LiteralPath release/TacticalSupport-windows.msi
           if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate -or -not $signature.TimeStamperCertificate) {
-            throw 'The Windows support tool must have a valid, timestamped Authenticode signature.'
+            throw 'The Windows MSI must have a valid, timestamped Authenticode signature.'
           }
           python packaging/support/manifest.py --directory release --platform windows --version $env:SUPPORT_VERSION --signer $signature.SignerCertificate.Subject
       - uses: actions/upload-artifact@v4
@@ -89,6 +107,7 @@ jobs:
           retention-days: 14
 
   macos:
+    if: inputs.platform == 'all' || inputs.platform == 'macos'
     runs-on: macos-latest
     environment: support-signing
     env:
@@ -160,6 +179,7 @@ jobs:
           retention-days: 14
 
   bundle:
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && contains(needs.*.result, 'success') }}
     needs: [windows, macos]
     runs-on: ubuntu-latest
     steps:

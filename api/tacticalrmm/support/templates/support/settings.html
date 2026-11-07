@@ -11,7 +11,7 @@
   </div>
   {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
   {% if branding_saved %}<div class="sh-alert sh-alert--ok" role="status">Branding saved. The support page is showing it now.</div>{% endif %}
-  {% if apps_saved %}<div class="sh-alert sh-alert--ok" role="status">Unsigned support apps published. The support page offers them now, with a note about the security warning.</div>{% endif %}
+  {% if apps_saved %}<div class="sh-alert sh-alert--ok" role="status">Generated installers are ready on the support page.</div>{% endif %}
   {% if previews_saved %}<div class="sh-alert sh-alert--ok" role="status">{% if screen_previews %}Screen previews are on. They show up in the session list within a few seconds.{% else %}Screen previews are off. No more pictures will be taken.{% endif %}</div>{% endif %}
   {% if group_created %}<div class="sh-alert sh-alert--ok" role="status">Support group ready. Build the support apps for it next.</div>{% endif %}
 
@@ -21,8 +21,8 @@
       <ul class="sp-apps">
         {% for p in platforms %}
         <li>
-          <span class="sp-tile"><svg class="sp-icon sp-icon--fill" aria-hidden="true"><use href="#i-{{ p.key }}"/></svg></span>
-          <div><b>{{ p.name }}</b><span>{% if p.installer.signed %}Version {{ p.installer.version }}, signed by {{ p.installer.signer }}{% elif p.installer %}From MeshCentral, not code-signed. {% if p.key == 'windows' %}Windows SmartScreen{% else %}macOS{% endif %} warns people before it runs.{% else %}Not published yet.{% endif %}</span></div>
+          <span class="sp-tile"><svg class="sp-icon sp-icon--fill" aria-hidden="true"><use href="#i-{{ p.icon }}"/></svg></span>
+          <div><b>{{ p.name }}</b><span>{% if p.installer.signed %}Generated version {{ p.installer.version }}, signed by {{ p.installer.signer }}{% elif p.installer %}Generated {% if p.key == 'windows' %}MSI with automatic Windows 7 support{% else %}Mac package{% endif %}. Not code-signed.{% else %}Generate this installer to make it available.{% endif %}</span></div>
           {% if p.installer.signed %}<span class="sh-pill sh-pill--ok sh-pill--dot">Signed</span>{% elif p.installer %}<span class="sh-pill sh-pill--warn sh-pill--dot">Unsigned</span>{% else %}<span class="sh-pill sh-pill--warn">Missing</span>{% endif %}
         </li>
         {% endfor %}
@@ -30,8 +30,8 @@
       {% if can_brand and mesh_group %}
       <form method="post" class="sp-apps-foot" data-busy>
         {% csrf_token %}<input type="hidden" name="action" value="apps">
-        <p class="sh-hint">Until signed apps are ready, get both straight from MeshCentral for the support group. People see a security warning first. Signed apps you publish later replace them.</p>
-        <button class="sh-btn" type="submit" data-busy-label="Getting the apps…">Get unsigned apps from MeshCentral</button>
+        <p class="sh-hint">The support page offers generated packages only. Windows gets one MSI that chooses its client during setup. Mac gets a universal package. Existing signed packages are kept.</p>
+        <button class="sh-btn" type="submit" data-busy-label="Generating installers…">Generate support installers</button>
       </form>
       {% endif %}
     </section>

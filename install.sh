@@ -348,6 +348,7 @@ echo "${noderepo}" | sudo tee /etc/apt/sources.list.d/nodesource.sources >/dev/n
 
 sudo apt update
 sudo apt install -y gcc g++ make
+sudo apt install -y wixl msitools g++-mingw-w64-i686
 sudo apt install -y nodejs
 sudo npm install -g npm
 

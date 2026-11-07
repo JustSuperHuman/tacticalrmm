@@ -3,7 +3,6 @@ import os
 import re
 import socket
 import subprocess
-import tempfile
 import time
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, List, Literal, Optional, Union
@@ -20,7 +19,7 @@ from knox.auth import TokenAuthentication
 from rest_framework.response import Response
 
 from agents.models import Agent
-from core.utils import get_core_settings, token_is_valid
+from core.utils import get_core_settings
 from logs.models import DebugLog
 from tacticalrmm.celery import app as celery_app
 from tacticalrmm.constants import (
@@ -29,7 +28,6 @@ from tacticalrmm.constants import (
     REDIS_LOCK_EXPIRE,
     WEEK_DAYS,
     WEEKS,
-    AgentPlat,
     CustomFieldType,
     DebugLogType,
     ScriptShell,
@@ -47,7 +45,7 @@ if TYPE_CHECKING:
     from clients.models import Client, Site
 
 
-def generate_winagent_exe(
+def generate_winagent_msi(
     *,
     client: int,
     site: int,
@@ -60,53 +58,28 @@ def generate_winagent_exe(
     api: str,
     file_name: str,
 ) -> Union[Response, FileResponse]:
-    from agents.utils import get_agent_url
+    from support.generation import BuildError, monitoring_response
 
-    inno = (
-        f"tacticalagent-v{settings.LATEST_AGENT_VER}-{AgentPlat.WINDOWS}-{goarch}.exe"
-    )
+    try:
+        return monitoring_response(
+            client=client,
+            site=site,
+            agent_type=agent_type,
+            rdp=rdp,
+            ping=ping,
+            power=power,
+            goarch=goarch,
+            token=token,
+            api=api,
+            file_name=file_name,
+        )
+    except (BuildError, ValueError) as exc:
+        return notify_error(str(exc))
 
-    codetoken, _ = token_is_valid()
 
-    dl_url = get_agent_url(goarch=goarch, plat=AgentPlat.WINDOWS, token=codetoken)
-
-    data = {
-        "client": client,
-        "site": site,
-        "agenttype": agent_type,
-        "rdp": str(rdp),
-        "ping": str(ping),
-        "power": str(power),
-        "goarch": goarch,
-        "token": token,
-        "inno": inno,
-        "url": dl_url,
-        "api": api,
-        "codesigntoken": codetoken,
-    }
-    headers = {"Content-type": "application/json"}
-
-    with tempfile.NamedTemporaryFile() as fp:
-        try:
-            r = requests.post(
-                settings.EXE_GEN_URL,
-                json=data,
-                headers=headers,
-                stream=True,
-                timeout=900,
-            )
-        except Exception as e:
-            DebugLog.error(message=str(e))
-            return notify_error(
-                "Something went wrong. Check debug error log for exact error message"
-            )
-
-        with open(fp.name, "wb") as f:
-            for chunk in r.iter_content(chunk_size=1024):
-                if chunk:
-                    f.write(chunk)
-        del r
-        return FileResponse(open(fp.name, "rb"), as_attachment=True, filename=file_name)
+def generate_winagent_exe(**kwargs) -> Union[Response, FileResponse]:
+    """Compatibility name for integrations; the only output is a generated MSI."""
+    return generate_winagent_msi(**kwargs)
 
 
 def get_default_timezone():

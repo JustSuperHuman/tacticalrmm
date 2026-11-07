@@ -2,6 +2,8 @@
 .quasar
 node_modules
 .venv/
+/payload/
+/release/
 .impeccable/review/
 /dist
 web/dist

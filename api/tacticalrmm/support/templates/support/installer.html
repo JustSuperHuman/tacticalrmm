@@ -1,0 +1,31 @@
+{% extends 'support/base.html' %}{% load static %}
+{% block title %}Generate Windows installer{% endblock %}
+{% block head %}<script src="{% static 'support/installer.js' %}" defer></script>{% endblock %}
+{% block body %}
+<main id="main" class="{% if embedded %}sp-installer-embed{% else %}sp-public{% endif %}">
+  <section class="{% if not embedded %}sh-card sp-card{% endif %}" aria-labelledby="installer-title">
+    <div class="sp-head">
+      <h1 id="installer-title">Windows installer</h1>
+      <p>One MSI for Windows 7 SP1 and later. Setup chooses the right client and connects the computer to monitoring.</p>
+    </div>
+    {% if error %}<div class="sh-alert sh-alert--error" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" class="sp-form" id="installer-form">
+      {% csrf_token %}
+      {% for field in form %}{% if field.name == 'site' or field.name == 'agent_type' or field.name == 'expires' %}
+      <div class="sh-field">
+        <label class="sh-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% for message in field.errors %}<p class="sp-error">{{ message }}</p>{% endfor %}
+      </div>
+      {% endif %}{% endfor %}
+      <details>
+        <summary>Windows options</summary>
+        {% for field in form %}{% if field.name == 'rdp' or field.name == 'ping' or field.name == 'power' %}<label class="sh-check">{{ field }} {{ field.label }}</label>{% endif %}{% endfor %}
+      </details>
+      <button class="sh-btn sh-btn--primary sh-btn--lg sh-btn--block" type="submit">Generate and download MSI</button>
+      <p class="sp-meta">Open the MSI on the computer you want to monitor. Its setup needs administrator permission.</p>
+      <p id="installer-status" class="sp-status" role="status"></p>
+    </form>
+  </section>
+</main>
+{% endblock %}

@@ -345,6 +345,8 @@ if ! sudo nginx -t >/dev/null 2>&1; then
   exit 1
 fi
 
+sudo apt install -y wixl msitools g++-mingw-w64-i686
+
 HAS_PY312=$(python3.12 --version | grep ${PYTHON_VER})
 if ! [[ $HAS_PY312 ]]; then
   printf >&2 "${GREEN}Updating to ${PYTHON_VER}${NC}\n"

@@ -15,6 +15,9 @@ MAX_SIZE = 256 * 1024 * 1024
 
 
 def fetch(platform, destination):
+    if platform not in ("windows", "windows7", "macos"):
+        raise ValueError("Unsupported platform")
+    windows = platform in ("windows", "windows7")
     base = os.environ["SUPPORT_MESH_URL"].rstrip("/")
     parsed = urllib.parse.urlsplit(base)
     if (
@@ -36,16 +39,16 @@ def fetch(platform, destination):
     # Keep Windows configuration beside the binary. Re-signing an EXE with an
     # embedded .msh can remove its enrollment data from the certificate table.
     params = {
-        "id": 4 if platform == "windows" else 10005,
+        "id": {"windows": 4, "windows7": 3, "macos": 10005}[platform],
     }
     if platform == "macos":
-        params.update(meshid=group, installflags=2)
+        params.update(meshid=group, installflags=0)
     if os.environ.get("SUPPORT_MESH_DOWNLOAD_KEY"):
         params["key"] = os.environ["SUPPORT_MESH_DOWNLOAD_KEY"]
     headers = {}
     if os.environ.get("SUPPORT_MESH_DOWNLOAD_COOKIE"):
         headers["Cookie"] = os.environ["SUPPORT_MESH_DOWNLOAD_COOKIE"]
-    endpoint = "meshagents" if platform == "windows" else "meshosxagent"
+    endpoint = "meshagents" if windows else "meshosxagent"
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryFile() as stream:
@@ -68,7 +71,7 @@ def fetch(platform, destination):
                     raise ValueError("MeshCentral response is too large")
                 stream.write(chunk)
         stream.seek(0)
-        if platform == "windows":
+        if windows:
             if stream.read(2) != b"MZ":
                 raise ValueError("MeshCentral did not return a Windows executable")
             stream.seek(0)
@@ -98,7 +101,7 @@ def fetch(platform, destination):
         print(
             f"Fetched {platform} installer; SHA-256: {hashlib.file_digest(stream, 'sha256').hexdigest()}"
         )
-    if platform == "windows":
+    if windows:
         config_params = {"id": group, "installflags": 1}
         if os.environ.get("SUPPORT_MESH_DOWNLOAD_KEY"):
             config_params["key"] = os.environ["SUPPORT_MESH_DOWNLOAD_KEY"]
@@ -133,7 +136,9 @@ def fetch(platform, destination):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--platform", choices=["windows", "macos"], required=True)
+    parser.add_argument(
+        "--platform", choices=["windows", "windows7", "macos"], required=True
+    )
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     try:

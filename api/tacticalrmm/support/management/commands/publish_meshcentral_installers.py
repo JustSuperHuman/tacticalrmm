@@ -1,16 +1,23 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from support import meshapps
+from support import generation
 from support.mesh import MeshError
+from support.models import SupportInstaller
 
 
 class Command(BaseCommand):
     help = (
-        "Publish the support apps straight from MeshCentral, unsigned, until signed "
-        "ones are ready. Signed apps already published are kept."
+        "Generate support installer packages. Windows always uses the universal MSI. "
+        "Existing signed packages are kept."
     )
 
     def add_arguments(self, parser):
+        parser.add_argument(
+            "--platform",
+            action="append",
+            choices=SupportInstaller.Platform.values,
+            help="Publish only this platform; repeat to select several. Defaults to all.",
+        )
         parser.add_argument(
             "--replace-signed",
             action="store_true",
@@ -19,14 +26,19 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         try:
-            results = meshapps.publish(replace_signed=options["replace_signed"])
-        except (meshapps.Unavailable, MeshError) as exc:
+            results = generation.publish(
+                replace_signed=options["replace_signed"], platforms=options["platform"]
+            )
+        except (
+            generation.BuildError,
+            generation.meshapps.Unavailable,
+            MeshError,
+        ) as exc:
             raise CommandError(str(exc)) from exc
         for platform, result in results.items():
             self.stdout.write(f"{platform}: {result}")
         self.stdout.write(
             self.style.WARNING(
-                "These apps aren't code-signed. Windows and macOS warn people before "
-                "they run. Publish signed apps to replace them."
+                "Generated packages are not code-signed yet. Publish a signed generated release to replace them."
             )
         )

@@ -211,6 +211,13 @@ class DeviceConsoleTests(TestCase):
         self.client.force_login(self.admin)
         self.url = f"/support/manage/devices/{WINDOWS_PC['id']}/"
         # The list asks for screen previews in the background. Tests don't run Celery.
+        self.ticket = patch(
+            "support.generation.monitoring_ticket",
+            return_value=(
+                "https://api.example.com/support/generated/",
+                "synthetic-private-ticket",
+            ),
+        ).start()
         self.capture = patch("support.tasks.capture_screen.delay").start()
         self.addCleanup(patch.stopall)
 
@@ -463,16 +470,14 @@ class DeviceConsoleTests(TestCase):
         self.assertEqual(shell, mesh.POWERSHELL)
         self.assertEqual(run.call_args.kwargs["timeout"], 20)
         self.assertIn("-Verb RunAs", command)
-        # The elevated process gets a file path, not the script.
-        self.assertIn("'-File'", command)
-        self.assertNotIn("-EncodedCommand", command)
-        script = elevated_script(command)
-        self.assertTrue(script.startswith("Remove-Item -LiteralPath $PSCommandPath"))
-        self.assertIn(f"$siteid = '{self.site.pk}'", script)
-        self.assertIn(f"$clientid = '{self.site.client_id}'", script)
-        self.assertIn("$agenttype = '\"server\"'", script)
-        self.assertNotIn("tokenchange", script)
-        self.assertIn("support-install.log", script)
+        self.assertIn("msiexec.exe", command)
+        self.assertIn("/passive /norestart", command)
+        self.assertIn("WinHttp.WinHttpRequest.5.1", command)
+        self.assertNotIn("--auth", command)
+        self.assertNotIn("tacticalagent-v", command)
+        self.assertEqual(self.ticket.call_args.kwargs["site"], self.site.pk)
+        self.assertEqual(self.ticket.call_args.kwargs["client"], self.site.client_id)
+        self.assertIn("JustConnect-install.log", command)
         handoff = SupportHandoff.objects.get()
         self.assertEqual((handoff.site, handoff.agent_type), (self.site, "server"))
         with computers(WINDOWS_PC):

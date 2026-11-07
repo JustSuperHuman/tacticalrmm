@@ -217,6 +217,7 @@ class SupportRun(models.Model):
 class SupportInstaller(models.Model):
     class Platform(models.TextChoices):
         WINDOWS = "windows", "Windows"
+        WINDOWS7 = "windows7", "Windows 7"
         MACOS = "macos", "Mac"
 
     platform = models.CharField(
@@ -226,16 +227,33 @@ class SupportInstaller(models.Model):
     sha256 = models.CharField(max_length=64)
     size = models.PositiveIntegerField()
     signer = models.CharField(max_length=255)
-    # False for the interim apps taken straight from MeshCentral (meshapps.py).
+    # Generated packages can be published while signing certificates are pending.
     signed = models.BooleanField(default=True)
+    # Old direct EXE downloads remain inactive until generated packages replace them.
+    generated = models.BooleanField(default=False)
     published_at = models.DateTimeField(auto_now=True)
 
     @property
     def filename(self):
-        suffix = "exe" if self.platform == self.Platform.WINDOWS else "pkg"
+        suffix = "pkg" if self.platform == self.Platform.MACOS else "msi"
         return f"TacticalSupport-{self.platform}.{suffix}"
 
     @property
     def storage_name(self):
-        suffix = "exe" if self.platform == self.Platform.WINDOWS else "pkg"
+        suffix = "pkg" if self.platform == self.Platform.MACOS else "msi"
         return f"{self.sha256}.{suffix}"
+
+
+class SupportPayload(models.Model):
+    """Unconfigured clients downloaded and verified by a generated MSI.
+
+    These contain no enrollment token or MeshCentral group configuration.
+    """
+
+    sha256 = models.CharField(max_length=64, primary_key=True)
+    size = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def storage_name(self):
+        return f"payloads/{self.sha256}.exe"

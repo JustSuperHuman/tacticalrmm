@@ -210,17 +210,17 @@ def run_command(device, command, shell, *, reply=True, timeout=60):
 STOP_UNIX = 'p=$PPID; nohup sh -c "sleep 1; kill $p" >/dev/null 2>&1 & echo Stopping.'
 # WMI starts the follow-up outside the agent's process tree, so it outlives the agent
 # and can run the support app's own uninstaller once the files are no longer in use.
-STOP_WINDOWS = (
-    '$agent = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId\n'
-    "$steps = 'Start-Sleep -Seconds 1; Stop-Process -Id ' + $agent + ' -Force "
-    "-ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; $u = Join-Path "
-    "$env:LOCALAPPDATA ''TacticalRMMSupport\\unins000.exe''; if (Test-Path $u) "
-    "{ Start-Process $u -ArgumentList ''/VERYSILENT'',''/SUPPRESSMSGBOXES'',''/NORESTART'' }'\n"
-    "$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($steps))\n"
-    "$null = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments "
-    '@{ CommandLine = "powershell.exe -NoProfile -WindowStyle Hidden -EncodedCommand $encoded" }\n'
-    "'Stopping.'\n"
-)
+STOP_WINDOWS = r"""
+$agent = (Get-WmiObject Win32_Process -Filter "ProcessId=$PID").ParentProcessId
+$product = (Get-ItemProperty -LiteralPath 'HKCU:\Software\JustConnect\support' -ErrorAction SilentlyContinue).ProductCode
+$steps = "Start-Sleep -Seconds 1; Stop-Process -Id $agent -Force -ErrorAction SilentlyContinue"
+if ($product -match '^\{[A-Fa-f0-9-]{36}\}$') { $steps += "; Start-Process msiexec.exe -WindowStyle Hidden -ArgumentList '/x $product /qn /norestart'" }
+$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($steps))
+$startup = ([wmiclass]'Win32_ProcessStartup').CreateInstance()
+$startup.ShowWindow = 0
+$null = ([wmiclass]'Win32_Process').Create(('powershell.exe -NoProfile -WindowStyle Hidden -EncodedCommand ' + $encoded), $null, $startup)
+'Stopping.'
+"""
 
 
 def remove_device(device):

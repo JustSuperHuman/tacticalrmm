@@ -23,7 +23,8 @@ from accounts.models import Role, User
 from clients.models import Site
 from logs.models import AuditLog
 
-from . import meshapps
+from . import generation, meshapps
+from .installer.builder import MSI_MAGIC
 from .models import SupportAccessCode, SupportBranding, SupportInstaller, code_digest
 
 TEST_SETTINGS = {
@@ -48,9 +49,12 @@ def make_invitation(user=None, site=None, raw="123456789", **overrides):
 
 def make_installer(directory, platform="windows"):
     # Synthetic format markers for HTTP/integrity tests; these are not signed clients.
-    payload = (b"MZ" if platform == "windows" else b"xar!") + b"test-only-support-tool"
+    payload = (
+        b"xar!" if platform == "macos" else MSI_MAGIC
+    ) + b"test-only-support-tool"
     installer = SupportInstaller.objects.create(
         platform=platform,
+        generated=True,
         version="1.0.0-test",
         size=len(payload),
         sha256=hashlib.sha256(payload).hexdigest(),
@@ -161,7 +165,7 @@ class PublicSupportTests(TestCase):
         self.grant()
         self.assertEqual(self.client.post("/support/download/linux/").status_code, 404)
 
-    def test_downloads_both_platforms_and_audits_without_raw_code(self):
+    def test_downloads_all_platforms_and_audits_without_raw_code(self):
         self.grant()
         for platform in ("windows", "macos"):
             installer, payload = make_installer(self.directory, platform)
@@ -381,6 +385,7 @@ class SupportConsoleTests(TestCase):
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 WINDOWS_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36"
+WINDOWS7_UA = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 Chrome/109 Safari/537.36"
 MAC_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 Version/17.5 Safari/605.1.15"
 IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148"
 
@@ -408,6 +413,19 @@ class PortalDeviceTests(TestCase):
         html = self.page(MAC_UA)
         self.assertLess(html.index("Download for Mac"), html.index("Windows version?"))
         self.assertIn('data-steps="windows" hidden', html)
+
+    def test_windows7_visitors_get_the_same_automatic_msi(self):
+        for agent in (WINDOWS7_UA, WINDOWS7_UA.replace("Win64; x64", "WOW32")):
+            html = self.page(agent)
+            self.assertIn("Download for Windows", html)
+            self.assertIn('action="/support/download/windows/"', html)
+            self.assertIn("Setup downloads the right client", html)
+            self.assertNotIn("Download for Windows 7", html)
+
+    def test_raw_legacy_downloads_are_not_offered(self):
+        SupportInstaller.objects.filter(platform="windows").update(generated=False)
+        html = self.page(WINDOWS7_UA)
+        self.assertIn("The Windows version isn’t available yet", html)
 
     def test_phones_are_told_to_use_their_computer(self):
         html = self.page(IPHONE_UA)
@@ -458,9 +476,7 @@ class SupportBrandingTests(TestCase):
         page = self.client.get("/support/manage/").content.decode()
         switch = page[page.index('class="sh-seg sp-switch"') :]
         switch = switch[: switch.index("</nav>")]
-        self.assertIn(
-            '<a href="/support/manage/" aria-current="page">', switch
-        )
+        self.assertIn('<a href="/support/manage/" aria-current="page">', switch)
         dashboard = settings.CORS_ORIGIN_WHITELIST[0].rstrip("/")
         self.assertIn(f'<a href="{dashboard}">', switch)
         self.assertIn("Access</a>", switch)
@@ -557,13 +573,42 @@ class PublishSupportTests(TestCase):
         self.override = override_settings(SUPPORT_INSTALLER_DIR=self.storage.name)
         self.override.enable()
         self.addCleanup(self.override.disable)
-        self.manifest = {"schema": 1, "version": "1.2.3", "installers": []}
+        self.payload = b"MZunconfigured-test-client"
+        self.payload_digest = hashlib.sha256(self.payload).hexdigest()
+        payload_dir = Path(self.bundle.name) / "payloads"
+        payload_dir.mkdir()
+        (payload_dir / f"{self.payload_digest}.exe").write_bytes(self.payload)
+        inspector = patch(
+            "support.management.commands.publish_support_installers.msi_properties",
+            return_value={
+                "GeneratedInstaller": "1",
+                "PackageMode": "support",
+                "LegacySha256": self.payload_digest,
+                "ModernSha256": self.payload_digest,
+            },
+        )
+        inspector.start()
+        self.addCleanup(inspector.stop)
+        self.manifest = {
+            "schema": 2,
+            "version": "1.2.3",
+            "installers": [],
+            "payloads": [
+                {
+                    "filename": f"payloads/{self.payload_digest}.exe",
+                    "sha256": self.payload_digest,
+                    "size": len(self.payload),
+                }
+            ],
+        }
         for platform in ("windows", "macos"):
             installer, payload = make_installer(self.storage.name, platform)
             (Path(self.bundle.name) / installer.filename).write_bytes(payload)
             self.manifest["installers"].append(
                 {
                     "platform": platform,
+                    "generated": True,
+                    "format": "msi" if platform == "windows" else "pkg",
                     "filename": installer.filename,
                     "sha256": installer.sha256,
                     "size": len(payload),
@@ -617,11 +662,37 @@ class PublishSupportTests(TestCase):
                 self.manifest["installers"][platform]["signature"][field] = original
         self.assertFalse(SupportInstaller.objects.exists())
 
-    def test_path_traversal_and_partial_release_are_rejected(self):
+    def test_path_traversal_and_empty_release_are_rejected(self):
         self.manifest["installers"][0]["filename"] = "../../outside.exe"
         with self.assertRaises(CommandError):
             self.publish()
-        self.manifest["installers"].pop()
+        self.manifest["installers"] = []
+        with self.assertRaises(CommandError):
+            self.publish()
+
+    def test_mac_can_be_published_independently_without_replacing_windows(self):
+        existing, _ = make_installer(self.storage.name)
+        self.manifest["installers"] = [self.manifest["installers"][1]]
+        self.publish()
+        existing.refresh_from_db()
+        self.assertEqual(existing.version, "1.0.0-test")
+        self.assertEqual(
+            SupportInstaller.objects.get(platform="macos").version, "1.2.3"
+        )
+
+    def test_separate_windows7_executable_is_rejected(self):
+        self.manifest["installers"][0]["platform"] = "windows7"
+        with self.assertRaises(CommandError):
+            self.publish()
+
+    def test_generated_marker_and_payload_integrity_are_required(self):
+        self.manifest["installers"][0]["generated"] = False
+        with self.assertRaises(CommandError):
+            self.publish()
+        self.manifest["installers"][0]["generated"] = True
+        (
+            Path(self.bundle.name) / "payloads" / f"{self.payload_digest}.exe"
+        ).write_bytes(b"changed")
         with self.assertRaises(CommandError):
             self.publish()
 
@@ -677,8 +748,8 @@ class UnsignedSupportAppTests(TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         for target, value in (
-            ("support.meshapps.mesh.find_group", GROUP),
-            ("support.meshapps.get_core_settings", MESH_SITE),
+            ("support.generation.mesh.find_group", GROUP),
+            ("support.generation.get_core_settings", MESH_SITE),
             ("support.host.mesh.find_group", GROUP),
         ):
             patcher = patch(target, return_value=value)
@@ -686,19 +757,27 @@ class UnsignedSupportAppTests(TestCase):
             self.addCleanup(patcher.stop)
 
     def publish(self, **kwargs):
+        def build(output, group):
+            if kwargs.get("windows", b"MZ").startswith(b"<"):
+                raise generation.BuildError("Windows client unavailable")
+            output.write_bytes(MSI_MAGIC + b"synthetic-package")
+            return output
+
         with override_settings(SUPPORT_INSTALLER_DIR=self.temporary.name), patch(
             "support.meshapps._download", side_effect=mesh_downloads(**kwargs)
-        ) as download:
-            return meshapps.publish(), download
+        ) as download, patch("support.generation.support_windows", side_effect=build):
+            return generation.publish(), download
 
-    def test_both_apps_come_from_the_support_group_unsigned(self):
+    def test_all_apps_come_from_the_support_group_unsigned(self):
         results, download = self.publish()
-        self.assertEqual(results, {"windows": "published", "macos": "published"})
+        self.assertEqual(
+            results,
+            {"windows": "generated", "macos": "generated"},
+        )
         urls = [call.args[0] for call in download.call_args_list]
         self.assertEqual(
             urls,
             [
-                "https://mesh.example.com/meshagents?id=4&meshid=GroupId&installflags=1",
                 "https://mesh.example.com/meshosxagent?id=10005&meshid=GroupId&installflags=0",
             ],
         )
@@ -724,8 +803,19 @@ class UnsignedSupportAppTests(TestCase):
         self.assertTrue(SupportInstaller.objects.get(platform="windows").signed)
         self.assertFalse(SupportInstaller.objects.get(platform="macos").signed)
 
+    def test_mac_can_be_fetched_when_windows_downloads_are_unavailable(self):
+        with override_settings(SUPPORT_INSTALLER_DIR=self.temporary.name), patch(
+            "support.meshapps._download", side_effect=mesh_downloads()
+        ) as download:
+            result = meshapps.publish(platforms=["macos"])
+        self.assertEqual(result, {"macos": "generated"})
+        self.assertEqual(download.call_count, 1)
+        self.assertIn("/meshosxagent?", download.call_args.args[0])
+
     def test_files_that_arent_installers_are_refused(self):
-        with self.assertRaisesMessage(meshapps.Unavailable, "Windows program"):
+        with self.assertRaisesMessage(
+            generation.BuildError, "Windows client unavailable"
+        ):
             self.publish(windows=b"<html>login</html>")
         with self.assertRaisesMessage(meshapps.Unavailable, "Mac installer package"):
             self.publish(package=b"not a package")
@@ -738,25 +828,23 @@ class UnsignedSupportAppTests(TestCase):
         public.post("/support/", {"code": "123456789"})
         page = public.get("/support/", HTTP_USER_AGENT=WINDOWS_UA)
         self.assertContains(page, "Windows may warn you before it opens")
-        self.assertContains(
-            page, "<b>More info</b>, then <b>Run anyway</b>", html=False
-        )
+        self.assertContains(page, "<b>MSI installer</b>", html=False)
         self.assertContains(page, "<b>Open Anyway</b>", html=False)
         self.assertNotContains(page, "Signed by")
         with override_settings(SUPPORT_INSTALLER_DIR=self.temporary.name):
             response = public.post("/support/download/windows/")
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(b"".join(response.streaming_content).startswith(b"MZ"))
+        self.assertTrue(b"".join(response.streaming_content).startswith(MSI_MAGIC))
 
     def test_only_settings_admins_can_get_them(self):
         role = baker.make(Role, can_use_mesh=True, can_install_agents=True)
         self.client.force_login(baker.make(User, role=role))
-        with patch("support.meshapps.publish") as publish:
+        with patch("support.generation.publish") as publish:
             response = self.client.post("/support/manage/settings/", {"action": "apps"})
         self.assertEqual(response.status_code, 403)
         publish.assert_not_called()
         self.client.force_login(self.admin)
-        with patch("support.meshapps.publish", return_value={"windows": "published"}):
+        with patch("support.generation.publish", return_value={"windows": "published"}):
             response = self.client.post("/support/manage/settings/", {"action": "apps"})
         self.assertRedirects(
             response,
@@ -764,7 +852,7 @@ class UnsignedSupportAppTests(TestCase):
             fetch_redirect_response=False,
         )
         with patch(
-            "support.meshapps.publish",
+            "support.generation.publish",
             side_effect=meshapps.Unavailable("Create the support group first."),
         ):
             response = self.client.post("/support/manage/settings/", {"action": "apps"})
