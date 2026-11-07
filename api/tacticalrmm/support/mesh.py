@@ -348,12 +348,11 @@ def desktop_relay(node_id, user, grant=True):
     """
     core, mesh_user = identity(user, node_id, grant)
     base = get_mesh_ws_url().split("/control.ashx")[0]
-    control_url = (
-        f"{base}/control.ashx?auth={get_auth_token(mesh_user, core.mesh_token)}"
-    )
+    token = get_auth_token(mesh_user, core.mesh_token)
+    control_url = f"{base}/control.ashx?auth={token}"
     tunnel = secrets.token_hex(12)
     try:
-        cookie = asyncio.run(_open_desktop(control_url, node_id, tunnel))
+        asyncio.run(_open_desktop(control_url, node_id, tunnel))
     except MeshError:
         raise
     except asyncio.TimeoutError as exc:
@@ -364,7 +363,9 @@ def desktop_relay(node_id, user, grant=True):
             "Tactical RMM’s MeshCentral settings are right."
         ) from exc
     public = re.sub(r"^http", "ws", core.mesh_site.rstrip("/"))
+    # MeshCentral's authcookie is bound to the backend's IP. Authenticate the
+    # browser with the technician's signed token so public clients can join too.
     return (
         f"{public}/meshrelay.ashx?browser=1&p=2&nodeid={node_id}"
-        f"&id={tunnel}&auth={cookie}"
+        f"&id={tunnel}&auth={token}"
     )

@@ -1,6 +1,10 @@
+import base64
 import json
+import time
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
+from Crypto.Cipher import AES
 from django.core.cache import cache
 from django.test import TestCase, override_settings
 from model_bakery import baker
@@ -182,6 +186,43 @@ class AgentViewerTests(TestCase):
 
 @override_settings(**TEST_SETTINGS)
 class DesktopRelayTests(TestCase):
+    def test_relay_authentication_allows_a_browser_on_a_different_ip(self):
+        user = baker.make(User, username="dana")
+        server_ip, browser_ip = "127.0.0.1", "8.8.8.8"
+        # MeshCentral's authcookie reply is encrypted and bound to the control
+        # connection's IP. Reusing it in a remote browser fails relay auth.
+        payload = {
+            "userid": user.mesh_user_id,
+            "domainid": "",
+            "time": int(time.time()),
+            "ip": server_ip,
+        }
+        cipher = AES.new(
+            bytes.fromhex(CORE.mesh_token)[:32], AES.MODE_GCM, nonce=bytes(range(12))
+        )
+        ciphertext, tag = cipher.encrypt_and_digest(json.dumps(payload).encode())
+        server_cookie = base64.b64encode(
+            cipher.nonce + tag + ciphertext, altchars=b"@$"
+        ).decode()
+        with patch(
+            "support.mesh.identity", return_value=(CORE, user.mesh_user_id)
+        ), patch(
+            "support.mesh.get_mesh_ws_url",
+            return_value="ws://127.0.0.1:4430/control.ashx?auth=server",
+        ), patch(
+            "support.mesh._open_desktop", return_value=server_cookie
+        ):
+            url = mesh.desktop_relay("node//Abc", user, grant=False)
+        token = parse_qs(urlsplit(url).query)["auth"][0]
+        encrypted = base64.b64decode(token, altchars=b"@$")
+        cipher = AES.new(
+            bytes.fromhex(CORE.mesh_token)[:32], AES.MODE_GCM, nonce=encrypted[:12]
+        )
+        cookie = json.loads(cipher.decrypt_and_verify(encrypted[28:], encrypted[12:28]))
+        self.assertEqual(cookie["userid"], user.mesh_user_id)
+        self.assertEqual(cookie["domainid"], "")
+        self.assertEqual(cookie.get("ip", browser_ip), browser_ip)
+
     def test_agent_ids_are_turned_into_meshcentrals_own_form(self):
         self.assertEqual(mesh.node_id(AGENT_HEX), AGENT_NODE)
         self.assertEqual(mesh.node_id(AGENT_HEX.lower()), AGENT_NODE)
@@ -209,7 +250,7 @@ class DesktopRelayTests(TestCase):
         self.assertEqual(
             url,
             "wss://mesh.example.com/meshrelay.ashx?browser=1&p=2&nodeid=node//Abc"
-            f"&id={tunnel}&auth=relaycookie",
+            f"&id={tunnel}&auth=danatoken",
         )
         # Agents keep the rights Tactical RMM's sync gives them.
         actions = [call.args[0]["action"] for call in request.call_args_list]
